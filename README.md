@@ -76,6 +76,12 @@ Processes only the `CREATE` and `INSERT` statements for the `users` table.
 python optimize_sql_dump.py --table users --input dump.sql --output users_only.sql
 ```
 
+### Example 6: Use the results of the program from the catalog `--load-data ./fast_load/`
+
+```
+parallel -j <n> "mysql -h <host> -u <user> < {} " ::: *.sql
+```
+
 ## All Options
 
 | Option                | Short | Description                                                                                      |
@@ -89,3 +95,4 @@ python optimize_sql_dump.py --table users --input dump.sql --output users_only.s
 | --load-data [dir]     |       | Generates .tsv and .sql files for fast import (fastest option).                                  |
 | --verbose             | -v    | Displays additional diagnostic information and a progress bar.                                   |
 | --dry-run             |       | Runs the script without writing any output files.                                                |
+
