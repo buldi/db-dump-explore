@@ -1,0 +1,134 @@
+# SOME DESCRIPTIVE TITLE.
+# Copyright (C) YEAR ORGANIZATION
+# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+# Polish translation for optimize_sql_dump
+msgid ""
+msgstr ""
+"Project-Id-Version: PACKAGE VERSION\n"
+"POT-Creation-Date: 2025-10-02 09:11+0200\n"
+"PO-Revision-Date: 2024-05-21 12:00+0200\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: LANGUAGE <LL@li.org>\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: pygettext.py 1.5\n"
+
+
+#: optimize_sql_dump.py:81
+msgid "Empty zip file"
+msgstr "Pusty plik zip"
+
+#: optimize_sql_dump.py:84
+msgid "ZIP archive contains multiple files, using only the first one: {name}"
+msgstr "Archiwum ZIP zawiera wiele plików, użyty zostanie tylko pierwszy z nich: {name}"
+
+#: optimize_sql_dump.py:490
+msgid "[INFO] Detected DB type: {db_type}"
+msgstr "[INFO] Wykryto typ bazy danych: {db_type}"
+
+#: optimize_sql_dump.py:497
+msgid "Processing"
+msgstr "Przetwarzanie"
+
+#: optimize_sql_dump.py:513
+msgid "[INFO] Created files for table {tname}: {sql_fname}, {tsv_fname}"
+msgstr "[INFO] Utworzono pliki dla tabeli {tname}: {sql_fname}, {tsv_fname}"
+
+#: optimize_sql_dump.py:517
+msgid "[INFO] Created file {fname}"
+msgstr "[INFO] Utworzono plik {fname}"
+
+#: optimize_sql_dump.py:649
+msgid ""
+"-- Optimized by SqlDumpOptimizer\n"
+msgstr "-- Zoptymalizowano przez SqlDumpOptimizer\n"
+
+#: optimize_sql_dump.py:650
+msgid ""
+"-- Source: {source}\n"
+msgstr "-- Źródło: {source}\n"
+
+#: optimize_sql_dump.py:687
+msgid "[INFO] Wrote {rows} records in {batches} batches."
+msgstr "[INFO] Zapisano {rows} rekordów w {batches} wsadach."
+
+#: optimize_sql_dump.py:690
+msgid "Done. Saved to: {path}"
+msgstr "Gotowe. Zapisano do: {path}"
+
+#: optimize_sql_dump.py:692
+msgid "Done. Split dump into files in directory: {path}"
+msgstr "Gotowe. Podzielono zrzut na pliki w katalogu: {path}"
+
+#: optimize_sql_dump.py:694
+msgid "Done. Generated files for import in directory: {path}"
+msgstr "Gotowe. Wygenerowano pliki do importu w katalogu: {path}"
+
+#: optimize_sql_dump.py:717
+msgid "SQL Dump Optimizer: merges INSERTs, detects compression, supports MySQL/Postgres."
+msgstr "Optymalizator zrzutów SQL: łączy INSERTy, wykrywa kompresję, wspiera MySQL/Postgres."
+
+#: optimize_sql_dump.py:722
+msgid "Optional form: <input_file> <output_file>"
+msgstr "Opcjonalna forma: <plik_wejściowy> <plik_wyjściowy>"
+
+#: optimize_sql_dump.py:724
+msgid "Dump file (can be .gz/.bz2/.xz/.zip)"
+msgstr "Plik zrzutu (może być .gz/.bz2/.xz/.zip)"
+
+#: optimize_sql_dump.py:725
+msgid "Output file (optimized)"
+msgstr "Plik wyjściowy (zoptymalizowany)"
+
+#: optimize_sql_dump.py:730
+msgid "Database dialect: mysql/postgres or auto (default)"
+msgstr "Dialekt bazy danych: mysql/postgres lub auto (domyślnie)"
+
+#: optimize_sql_dump.py:736
+msgid "If specified, optimize only this table (name without schema)"
+msgstr "Jeśli podano, optymalizuj tylko tę tabelę (nazwa bez schematu)"
+
+#: optimize_sql_dump.py:742
+msgid "Number of tuples in a single merged INSERT (default: 1000)"
+msgstr "Liczba krotek w pojedynczym, połączonym poleceniu INSERT (domyślnie: 1000)"
+
+#: optimize_sql_dump.py:745
+msgid "Print diagnostic information"
+msgstr "Wyświetl informacje diagnostyczne"
+
+#: optimize_sql_dump.py:750
+msgid "Dry run mode: does not write the output file"
+msgstr "Tryb 'na sucho': nie zapisuje pliku wyjściowego"
+
+#: optimize_sql_dump.py:756
+msgid "Split the dump into separate files per table. If a directory is provided, files will be saved there. If no value is given, use the current directory."
+msgstr "Dzieli zrzut na osobne pliki dla każdej tabeli. Jeśli podano katalog, pliki zostaną tam zapisane. Jeśli nie podano wartości, użyty zostanie bieżący katalog."
+
+#: optimize_sql_dump.py:764
+msgid "[MySQL ONLY] Generate .sql and .tsv files for LOAD DATA INFILE. Requires a directory (defaults to current). Mutually exclusive with --output and --split."
+msgstr "[TYLKO MySQL] Generuje pliki .sql i .tsv dla LOAD DATA INFILE. Wymaga podania katalogu (domyślnie bieżący). Wzajemnie wyklucza się z --output i --split."
+
+#: optimize_sql_dump.py:771
+msgid "[--load-data ONLY] Number of rows buffered before writing to the .tsv file (default: 200)"
+msgstr "[TYLKO --load-data] Liczba wierszy buforowanych przed zapisem do pliku .tsv (domyślnie: 200)"
+
+#: optimize_sql_dump.py:782
+msgid "You must provide an input dump (--input or the first positional argument)"
+msgstr "Musisz podać wejściowy plik zrzutu (--input lub jako pierwszy argument pozycyjny)"
+
+#: optimize_sql_dump.py:785
+msgid "File not found: {path}"
+msgstr "Nie znaleziono pliku: {path}"
+
+#: optimize_sql_dump.py:789
+msgid "The --load-data option cannot be used with --output or --split."
+msgstr "Opcja --load-data nie może być używana razem z --output lub --split."
+
+#: optimize_sql_dump.py:792
+msgid "You must specify an output mode: --output <file>, --split [dir], or --load-data [dir]."
+msgstr "Musisz określić tryb wyjścia: --output <plik>, --split [katalog] lub --load-data [katalog]."
+
+#: optimize_sql_dump.py:794
+msgid "The --output option cannot be used with --split or --load-data."
+msgstr "Opcja --output nie może być używana razem z --split lub --load-data."

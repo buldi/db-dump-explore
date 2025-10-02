@@ -21,6 +21,7 @@ import gzip
 import bz2
 import lzma
 import zipfile
+import locale
 import re
 import warnings
 from abc import ABC, abstractmethod
@@ -29,6 +30,22 @@ try:
     from tqdm import tqdm
 except ImportError:
     tqdm = None
+
+
+# ---------- Localization setup ----------
+try:
+    # Set user locale from the operating system
+    locale.setlocale(locale.LC_ALL, "")
+    # Get language (e.g., 'pl_PL' -> 'pl')
+    lang = locale.getlocale()[0]
+    if lang:
+        lang = lang.split("_")[0]
+except (locale.Error, IndexError):
+    lang = "en"
+
+# By default, use English if translations are not found
+import gettext
+_ = gettext.gettext
 
 # ---------- compression detection by magic number ----------
 MAGIC_TYPES = [
@@ -61,10 +78,10 @@ def open_maybe_compressed(path, mode="rt"):
         z = zipfile.ZipFile(path, "r")
         names = z.namelist()
         if not names:
-            raise ValueError("Empty zip file")
+            raise ValueError(_("Empty zip file"))
         if len(names) > 1:
             warnings.warn(
-                f"ZIP archive contains multiple files, using only the first one: {names[0]}"
+                _("ZIP archive contains multiple files, using only the first one: {name}").format(name=names[0])
             )
         b = z.open(names[0], "r")
         return (
@@ -470,14 +487,14 @@ class DumpOptimizer:
         if db_type == "auto":
             db_type = detect_db_type(self.args['inpath'])
             if self.args.get('verbose'):
-                print(f"[INFO] Detected DB type: {db_type}")
+                print(_("[INFO] Detected DB type: {db_type}").format(db_type=db_type))
         return MySQLHandler() if db_type == "mysql" else PostgresHandler()
 
     def _setup_progress(self):
         global progress
         filesize = os.path.getsize(self.args['inpath'])
         if self.args.get('verbose') and tqdm:
-            progress = tqdm(total=filesize, unit="B", unit_scale=True, desc="Processing")
+            progress = tqdm(total=filesize, unit="B", unit_scale=True, desc=_("Processing"))
         else:
             progress = None
         return progress
@@ -493,11 +510,11 @@ class DumpOptimizer:
                     'tsv_path': os.path.abspath(tsv_fname),
                     'tsv_buffer': []
                 }
-                if self.args.get('verbose'): print(f"[INFO] Created files for table {tname}: {sql_fname}, {tsv_fname}")
+                if self.args.get('verbose'): print(_("[INFO] Created files for table {tname}: {sql_fname}, {tsv_fname}").format(tname=tname, sql_fname=sql_fname, tsv_fname=tsv_fname))
             else: # split_mode
                 fname = os.path.join(self.output_dir, f"{tname}.sql")
                 self.file_map[tname] = open(fname, "w", encoding="utf-8")
-                if self.args.get('verbose'): print(f"[INFO] Created file {fname}")
+                if self.args.get('verbose'): print(_("[INFO] Created file {fname}").format(fname=fname))
         
         return self.file_map[tname]['sql'] if self.load_data_mode else self.file_map[tname]
 
@@ -629,8 +646,8 @@ class DumpOptimizer:
         else:
             self.fout = open(self.args['outpath'], "w", encoding="utf-8") if not self.args.get('dry_run') else open(os.devnull, "w")
             if self.fout:
-                self.fout.write("-- Optimized by SqlDumpOptimizer\n")
-                self.fout.write(f"-- Source: {os.path.basename(self.args['inpath'])}\n")
+                self.fout.write(_("-- Optimized by SqlDumpOptimizer\n"))
+                self.fout.write(_("-- Source: {source}\n").format(source=os.path.basename(self.args['inpath'])))
                 self.fout.write("--\n\n")
 
         with open_maybe_compressed(self.args['inpath'], "rt") as fin:
@@ -667,14 +684,14 @@ class DumpOptimizer:
             if self.fout: self.fout.close()
 
         if self.args.get('verbose'):
-            print(f"[INFO] Wrote {self.total_rows} records in {self.total_batches} batches.")
+            print(_("[INFO] Wrote {rows} records in {batches} batches.").format(rows=self.total_rows, batches=self.total_batches))
         
         if not self.args.get('dry_run') and not self.split_mode and not self.load_data_mode:
-            print(f"Done. Saved to: {self.args['outpath']}")
+            print(_("Done. Saved to: {path}").format(path=self.args['outpath']))
         elif self.split_mode:
-            print(f"Done. Split dump into files in directory: {self.args['split_dir']}")
+            print(_("Done. Split dump into files in directory: {path}").format(path=self.args['split_dir']))
         elif self.load_data_mode:
-            print(f"Done. Generated files for import in directory: {self.args['load_data_dir']}")
+            print(_("Done. Generated files for import in directory: {path}").format(path=self.args['load_data_dir']))
         
         if self.progress:
             self.progress.close()
@@ -685,62 +702,73 @@ def optimize_dump(**kwargs):
 
 # ---------- CLI ----------
 def main():
+    global _
+    APP_NAME = "optimize_sql_dump"
+    LOCALE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'locale')
+    
+    try:
+        translation = gettext.translation(APP_NAME, localedir=LOCALE_DIR, fallback=True)
+        _ = translation.gettext
+    except FileNotFoundError:
+        # fallback to default gettext if no .mo file is found
+        pass
+
     p = argparse.ArgumentParser(
-        description="SQL Dump Optimizer: merges INSERTs, detects compression, supports MySQL/Postgres."
+        description=_("SQL Dump Optimizer: merges INSERTs, detects compression, supports MySQL/Postgres.")
     )
     p.add_argument(
         "positional",
         nargs="*",
-        help="Optional form: <input_file> <output_file>",
+        help=_("Optional form: <input_file> <output_file>"),
     )
-    p.add_argument("--input", "-i", help="Dump file (can be .gz/.bz2/.xz/.zip)")
-    p.add_argument("--output", "-o", help="Output file (optimized)")
+    p.add_argument("--input", "-i", help=_("Dump file (can be .gz/.bz2/.xz/.zip)"))
+    p.add_argument("--output", "-o", help=_("Output file (optimized)"))
     p.add_argument(
         "--db-type",
         choices=["auto", "mysql", "postgres"],
         default="auto",
-        help="Database dialect: mysql/postgres or auto (default)",
+        help=_("Database dialect: mysql/postgres or auto (default)"),
     )
     p.add_argument(
         "--table",
         "-t",
         default=None,
-        help="If specified, optimize only this table (name without schema)",
+        help=_("If specified, optimize only this table (name without schema)"),
     )
     p.add_argument(
         "--batch-size",
         type=int,
         default=1000,
-        help="Number of tuples in a single merged INSERT (default: 1000)",
+        help=_("Number of tuples in a single merged INSERT (default: 1000)"),
     )
     p.add_argument(
-        "--verbose", "-v", action="store_true", help="Print diagnostic information"
+        "--verbose", "-v", action="store_true", help=_("Print diagnostic information")
     )
     p.add_argument(
         "--dry-run",
         action="store_true",
-        help="Dry run mode: does not write the output file",
+        help=_("Dry run mode: does not write the output file"),
     )
     p.add_argument(
         "--split",
         nargs="?",
         const=".",
-        help="Split the dump into separate files per table. "
+        help=_("Split the dump into separate files per table. "
         "If a directory is provided, files will be saved there. "
-        "If no value is given, use the current directory.",
+        "If no value is given, use the current directory."),
     )
     p.add_argument(
         "--load-data",
         nargs="?",
         const=".",
-        help="[MySQL ONLY] Generate .sql and .tsv files for LOAD DATA INFILE. "
-        "Requires a directory (defaults to current). Mutually exclusive with --output and --split.",
+        help=_("[MySQL ONLY] Generate .sql and .tsv files for LOAD DATA INFILE. "
+        "Requires a directory (defaults to current). Mutually exclusive with --output and --split."),
     )
     p.add_argument(
         "--tsv-buffer-size",
         type=int,
         default=200,
-        help="[--load-data ONLY] Number of rows buffered before writing to the .tsv file (default: 200)",
+        help=_("[--load-data ONLY] Number of rows buffered before writing to the .tsv file (default: 200)"),
     )
     
     args = p.parse_args()
@@ -751,19 +779,19 @@ def main():
             args.output = args.positional[1]
 
     if not args.input:
-        p.error("You must provide an input dump (--input or the first positional argument)")
+        p.error(_("You must provide an input dump (--input or the first positional argument)"))
 
     if not os.path.exists(args.input):
-        print("File not found:", args.input)
+        print(_("File not found: {path}").format(path=args.input))
         sys.exit(2)
 
     if args.load_data and (args.output or args.split):
-        p.error("The --load-data option cannot be used with --output or --split.")
+        p.error(_("The --load-data option cannot be used with --output or --split."))
 
     if not args.output and not args.split and not args.load_data:
-        p.error("You must specify an output mode: --output <file>, --split [dir], or --load-data [dir].")
+        p.error(_("You must specify an output mode: --output <file>, --split [dir], or --load-data [dir]."))
     if args.output and (args.split or args.load_data):
-        p.error("The --output option cannot be used with --split or --load-data.")
+        p.error(_("The --output option cannot be used with --split or --load-data."))
 
     optimize_dump(
         inpath=args.input,
