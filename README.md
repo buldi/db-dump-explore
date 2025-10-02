@@ -31,7 +31,7 @@ This script (`optimize_sql_dump.py`) processes a dump file and optimizes it in s
 The script is operated from the command line.
 
 ```bash
-python optimize_sql_dump.py [opcje] <plik_wejściowy> [plik_wyjściowy]
+python optimize_sql_dump.py [opcje] <file_input> [file_output]
 ```
 
 ### Example 1: Basic Optimization (Merging INSERTs)
