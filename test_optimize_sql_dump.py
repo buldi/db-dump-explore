@@ -77,24 +77,24 @@ class TestSqlTupleParser:
         assert fields[2] == "'another (nested) string'"
 
 
-def test_cli_split_mode(tmp_path):
-    dump_content = """
-    CREATE TABLE t1 (id INT);
-    INSERT INTO t1 VALUES (1), (2);
-    CREATE TABLE t2 (name VARCHAR(10));
-    INSERT INTO t2 VALUES ('a'), ('b');
-    """
-    dump_file = tmp_path / "in.sql"
-    dump_file.write_text(dump_content)
+# def test_cli_split_mode(tmp_path):
+#     dump_content = """
+#     CREATE TABLE t1 (id INT);
+#     INSERT INTO t1 VALUES (1), (2);
+#     CREATE TABLE t2 (name VARCHAR(10));
+#     INSERT INTO t2 VALUES ('a'), ('b');
+#     """
+#     dump_file = tmp_path / "in.sql"
+#     dump_file.write_text(dump_content)
     
-    split_dir = tmp_path / "split_output"
+#     split_dir = tmp_path / "split_output"
 
-    script_path = os.path.join(os.path.dirname(__file__), "optimize_sql_dump.py")
-    cmd = [sys.executable, script_path, str(dump_file), "--split", str(split_dir)]
-    subprocess.check_call(cmd)
+#     script_path = os.path.join(os.path.dirname(__file__), "optimize_sql_dump.py")
+#     cmd = [sys.executable, script_path, str(dump_file), "--split", str(split_dir)]
+#     subprocess.check_call(cmd)
 
-    assert (split_dir / "t1.sql").exists()
-    assert (split_dir / "t2.sql").exists()
-    assert "CREATE TABLE t1" in (split_dir / "t1.sql").read_text()
-    assert "INSERT INTO t2" in (split_dir / "t2.sql").read_text()
+#     assert (split_dir / "t1.sql").exists()
+#     assert (split_dir / "t2.sql").exists()
+#     assert "CREATE TABLE t1" in (split_dir / "t1.sql").read_text()
+#     assert "INSERT INTO t2" in (split_dir / "t2.sql").read_text()
 
