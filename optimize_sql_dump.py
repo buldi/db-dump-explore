@@ -31,21 +31,32 @@ try:
 except ImportError:
     tqdm = None
 
+try:
+    import mysql.connector
+except ImportError:
+    mysql = None
+    tqdm = None
+
 
 # ---------- Localization setup ----------
+APP_NAME = "optimize_sql_dump"
+LOCALE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'locale')
+
 try:
     # Set user locale from the operating system
     locale.setlocale(locale.LC_ALL, "")
-    # Get language (e.g., 'pl_PL' -> 'pl')
-    lang = locale.getlocale()[0]
-    if lang:
-        lang = lang.split("_")[0]
 except (locale.Error, IndexError):
-    lang = "en"
+    pass # Keep default locale if setting fails
 
-# By default, use English if translations are not found
 import gettext
-_ = gettext.gettext
+
+try:
+    # Find and load the translation file
+    translation = gettext.translation(APP_NAME, localedir=LOCALE_DIR, fallback=True)
+    _ = translation.gettext
+except FileNotFoundError:
+    # Fallback to default gettext if no .mo file is found
+    _ = gettext.gettext
 
 # ---------- compression detection by magic number ----------
 MAGIC_TYPES = [
@@ -150,6 +161,11 @@ class DatabaseHandler(ABC):
         pass
 
     @abstractmethod
+    def get_truncate_statement(self, tname: str) -> str:
+        """Returns the command to truncate a table."""
+        pass
+
+    @abstractmethod
     def get_load_statement(self, tname: str, tsv_path: str, cols_str: str) -> str:
         """Returns the command to load data from a TSV file."""
         pass
@@ -199,6 +215,9 @@ class MySQLHandler(DatabaseHandler):
             name = name.split(".")[-1]
         return name
 
+    def get_truncate_statement(self, tname: str) -> str:
+        return f"TRUNCATE TABLE `{tname}`;\n\n"
+
     def get_load_statement(self, tname: str, tsv_path: str, cols_str: str) -> str:
         return (
             f"LOAD DATA LOCAL INFILE '{tsv_path}'\n"
@@ -228,6 +247,36 @@ class MySQLHandler(DatabaseHandler):
                 cols_with_types.append(parsed)
         return cols_with_types
 
+    def extract_full_column_definitions(self, create_stmt: str) -> dict[str, str]:
+        """Extracts full column definitions from a CREATE TABLE statement."""
+        m = re.search(
+            r"\((.*)\)\s*(ENGINE|TYPE|AS|COMMENT|;)", create_stmt, re.S | re.I
+        )
+        if not m:
+            m = re.search(r"CREATE\s+TABLE[^\(]*\((.*)\)\s*;", create_stmt, re.S | re.I)
+        if not m:
+            return {}
+        cols_blob = m.group(1)
+        definitions = {}
+        for line in cols_blob.splitlines():
+            line = line.strip().rstrip(",")
+            if not line or re.match(r"PRIMARY\s+KEY|KEY\s+|UNIQUE\s+|CONSTRAINT\s+", line, re.I):
+                continue
+            col_name = line.split()[0].strip('`"')
+            definitions[col_name] = line
+        return definitions
+
+    def extract_primary_key(self, create_stmt: str) -> list[str]:
+        """Extracts the primary key column(s) from a CREATE TABLE statement."""
+        m = re.search(r"PRIMARY\s+KEY\s*\(([^)]+)\)", create_stmt, re.I)
+        if not m:
+            return []
+        
+        pk_blob = m.group(1)
+        # Remove potential key length specifications like `col_name`(255)
+        pk_cols = [re.sub(r'\s*\(\d+\)', '', c.strip()).strip('`"') for c in pk_blob.split(',')]
+        return pk_cols
+
     def extract_columns_from_create(self, create_stmt: str) -> str:
         return self._extract_columns_from_create_base(
             create_stmt,
@@ -252,6 +301,9 @@ class PostgresHandler(DatabaseHandler):
         if "." in name:
             name = name.split(".")[-1]
         return name
+
+    def get_truncate_statement(self, tname: str) -> str:
+        return f"TRUNCATE TABLE \"{tname}\" RESTART IDENTITY CASCADE;\n\n"
 
     def get_load_statement(self, tname: str, tsv_path: str, cols_str: str) -> str:
     # Postgres does not use `LOCAL` in the same way, the path must be accessible to the server
@@ -473,7 +525,8 @@ class DumpOptimizer:
 
         self.split_mode = bool(self.args.get('split_dir'))
         self.load_data_mode = bool(self.args.get('load_data_dir'))
-        self.output_dir = self.args.get('split_dir') or self.args.get('load_data_dir')
+        self.insert_only_mode = bool(self.args.get('insert_only'))
+        self.output_dir = self.args.get('split_dir') or self.args.get('load_data_dir') or self.args.get('insert_only')
 
         self.file_map = {}
         self.fout = None
@@ -510,13 +563,20 @@ class DumpOptimizer:
                     'tsv_path': os.path.abspath(tsv_fname),
                     'tsv_buffer': []
                 }
-                if self.args.get('verbose'): print(_("[INFO] Created files for table {tname}: {sql_fname}, {tsv_fname}").format(tname=tname, sql_fname=sql_fname, tsv_fname=tsv_fname))
-            else: # split_mode
+                if self.args.get('verbose'):
+                    print(_("[INFO] Created files for table {tname}: {sql_fname}, {tsv_fname}").format(tname=tname, sql_fname=sql_fname, tsv_fname=tsv_fname))
+            elif self.split_mode or self.insert_only_mode:
                 fname = os.path.join(self.output_dir, f"{tname}.sql")
-                self.file_map[tname] = open(fname, "w", encoding="utf-8")
-                if self.args.get('verbose'): print(_("[INFO] Created file {fname}").format(fname=fname))
+                writer = open(fname, "w", encoding="utf-8")
+                if self.insert_only_mode:
+                    writer.write(self.handler.get_truncate_statement(tname))
+                self.file_map[tname] = writer
+                if self.args.get('verbose'):
+                    print(_("[INFO] Created file {fname}").format(fname=fname))
         
-        return self.file_map[tname]['sql'] if self.load_data_mode else self.file_map[tname]
+        if self.load_data_mode: return self.file_map[tname]['sql']
+        if self.split_mode or self.insert_only_mode: return self.file_map[tname]
+        return None # Should not happen if logic is correct
 
     def _flush_insert_buffer(self, tname):
         buf = self.insert_buffers.get(tname)
@@ -524,7 +584,7 @@ class DumpOptimizer:
             return
         cols = buf.get("cols_text", "")
         writer = self._get_writer(tname) if self.split_mode else self.fout
-        writer.write(f"INSERT INTO {tname} {cols} VALUES\n")
+        writer.write(f"INSERT INTO {self.handler.normalize_table_name(tname)} {cols} VALUES\n")
         writer.write(",\n".join(buf["tuples"]))
         writer.write(";\n\n")
         self.total_batches += 1
@@ -545,10 +605,13 @@ class DumpOptimizer:
 
         tname = self.handler.normalize_table_name(m.group("name").strip())
         self.create_map[tname] = stmt
+        if self.insert_only_mode:
+            return # Do not write CREATE statements in this mode
+
         target_table = self.args.get('target_table')
-        if not target_table or tname == target_table:                        
+        if not target_table or tname == target_table:
             if self.split_mode or self.load_data_mode:
-                writer = self._get_writer(tname)
+                writer = self._get_writer(tname) # This will create the file
                 if self.load_data_mode and "IF NOT EXISTS" not in stmt.upper()[:100]:
                     create_stmt = re.sub(r"CREATE\s+TABLE", "CREATE TABLE IF NOT EXISTS", stmt, count=1, flags=re.I)
                     writer.write(create_stmt.strip() + ";\n\n")
@@ -600,7 +663,7 @@ class DumpOptimizer:
                 self.total_rows += count
             return
 
-        writer = self._get_writer(tname) if self.split_mode else self.fout
+        writer = self._get_writer(tname) if (self.split_mode or self.insert_only_mode) else self.fout
         if not prefix or not values_body:
             writer.write(stmt)
             return
@@ -636,7 +699,7 @@ class DumpOptimizer:
 
     def _handle_other(self, stmt):
         target_table = self.args.get('target_table')
-        if not target_table or (target_table in stmt):
+        if not self.insert_only_mode and (not target_table or (target_table in stmt)):
             if not self.split_mode and not self.load_data_mode:
                 self.fout.write(stmt)
 
@@ -667,7 +730,7 @@ class DumpOptimizer:
         self.finalize()
 
     def finalize(self):
-        if self.split_mode or self.load_data_mode:
+        if self.split_mode or self.load_data_mode or self.insert_only_mode:
             if self.load_data_mode:
                 for tname in self.file_map.keys():
                     self._flush_tsv_buffer(tname, force=True)
@@ -677,7 +740,7 @@ class DumpOptimizer:
                     writers['sql'].write(load_stmt)
                     writers['sql'].close()
                     writers['tsv'].close()
-            else: # split_mode
+            else: # split_mode or insert_only_mode
                 for f in self.file_map.values():
                     f.close()
         else:
@@ -692,27 +755,283 @@ class DumpOptimizer:
             print(_("Done. Split dump into files in directory: {path}").format(path=self.args['split_dir']))
         elif self.load_data_mode:
             print(_("Done. Generated files for import in directory: {path}").format(path=self.args['load_data_dir']))
+        elif self.insert_only_mode:
+            print(_("Done. Generated insert-only files in directory: {path}").format(path=self.args['insert_only']))
         
         if self.progress:
             self.progress.close()
 
+class DatabaseDiffer:
+    def __init__(self, **kwargs):
+        self.args = kwargs
+        self.handler = MySQLHandler() # Currently, diff only supports MySQL
+        self.progress = self._setup_progress()
+        self.connection = None
+        self.cursor = None
+        self.create_map = {}
+
+    def _setup_progress(self):
+        global progress
+        filesize = os.path.getsize(self.args['inpath'])
+        if self.args.get('verbose') and tqdm:
+            progress = tqdm(total=filesize, unit="B", unit_scale=True, desc=_("Parsing dump for diff"))
+        else:
+            progress = None
+        return progress
+
+    def connect_db(self):
+        try:
+            self.connection = mysql.connector.connect(
+                host=self.args['db_host'],
+                user=self.args['db_user'],
+                password=self.args['db_password'],
+                database=self.args['db_name']
+            )
+            self.cursor = self.connection.cursor(dictionary=True)
+            if self.args.get('verbose'):
+                print(_("[INFO] Successfully connected to database '{db}' on {host}").format(db=self.args['db_name'], host=self.args['db_host']))
+        except mysql.connector.Error as err:
+            print(_("[ERROR] Database connection failed: {error}").format(error=err))
+            sys.exit(1)
+
+    def get_db_schema(self, table_name: str) -> dict[str, dict]:
+        """Fetches column definitions for a table from the live database."""
+        if not self.connection: return {}
+        query = """
+            SELECT COLUMN_NAME, COLUMN_TYPE, IS_NULLABLE, COLUMN_DEFAULT, EXTRA, CHARACTER_SET_NAME, COLLATION_NAME
+            FROM information_schema.COLUMNS
+            WHERE TABLE_SCHEMA = %s AND TABLE_NAME = %s
+            ORDER BY ORDINAL_POSITION;
+        """
+        self.cursor.execute(query, (self.args['db_name'], table_name))
+        schema = {row['COLUMN_NAME']: row for row in self.cursor.fetchall()}
+        return schema
+
+    def compare_schemas(self, dump_cols: dict[str, str], db_cols: dict[str, dict], table_name: str) -> list[str]:
+        """Compares schemas and generates ALTER TABLE statements."""
+        alter_statements = []
+        last_col = None
+
+        for col_name, dump_def in dump_cols.items():
+            if col_name not in db_cols:
+                position = f" AFTER `{last_col}`" if last_col else " FIRST"
+                alter_statements.append(f"ALTER TABLE `{table_name}` ADD COLUMN {dump_def}{position};")
+            else:
+                # Basic comparison - this can be greatly expanded
+                # For now, we compare the raw definition string from the dump with a reconstructed one.
+                # This is a simplification. A robust solution would parse both definitions into a structured format.
+                db_col_info = db_cols[col_name]
+                db_def_parts = [f"`{col_name}`", db_col_info['COLUMN_TYPE']]
+                if db_col_info['CHARACTER_SET_NAME']:
+                    db_def_parts.append(f"CHARACTER SET {db_col_info['CHARACTER_SET_NAME']}")
+                if db_col_info['COLLATION_NAME']:
+                    db_def_parts.append(f"COLLATE {db_col_info['COLLATION_NAME']}")
+                db_def_parts.append("NOT NULL" if db_col_info['IS_NULLABLE'] == 'NO' else "NULL")
+                if db_col_info['COLUMN_DEFAULT'] is not None:
+                    default_val = db_col_info['COLUMN_DEFAULT']
+                    db_def_parts.append(f"DEFAULT '{str(default_val).replace('\'', '\'\'').replace('\\\\', '\\\\\\\\')}'" if isinstance(default_val, str) else f"DEFAULT {default_val}")
+                elif db_col_info['IS_NULLABLE'] == 'YES':
+                     db_def_parts.append("DEFAULT NULL")
+                if db_col_info['EXTRA']:
+                    db_def_parts.append(db_col_info['EXTRA'])
+                
+                # Normalize and compare. This is a heuristic.
+                normalized_dump_def = ' '.join(dump_def.lower().split())
+                normalized_db_def = ' '.join(' '.join(db_def_parts).lower().split())
+                
+                # A simple string comparison is not robust. Let's check for major differences.
+                # For this example, we'll just trigger a MODIFY if the type is different.
+                if db_col_info['COLUMN_TYPE'].lower() not in normalized_dump_def:
+                     alter_statements.append(f"ALTER TABLE `{table_name}` MODIFY COLUMN {dump_def};")
+
+            last_col = col_name
+        return alter_statements
+
+    def get_db_primary_keys(self, table_name: str, pk_cols: list[str]) -> set:
+        """Fetches all primary key values from a database table."""
+        if not self.connection or not pk_cols: return set()
+        
+        pk_cols_str = ", ".join([f"`{c}`" for c in pk_cols])
+        query = f"SELECT {pk_cols_str} FROM `{table_name}`"
+        self.cursor.execute(query)
+        
+        keys = set()
+        for row in self.cursor.fetchall():
+            # Create a tuple of PK values, converting non-string types to string for consistent hashing
+            pk_tuple = tuple(str(row[c]) for c in pk_cols)
+            keys.add(pk_tuple)
+        
+        if self.args.get('verbose'):
+            print(_("[INFO] Fetched {count} primary keys for table `{tname}`.").format(count=len(keys), tname=table_name))
+        return keys
+
+    def get_db_row_by_pk(self, table_name: str, pk_cols: list[str], pk_values: tuple) -> dict | None:
+        """Fetches a single row from the database by its primary key."""
+        if not self.connection or not pk_cols or len(pk_cols) != len(pk_values): return None
+
+        where_clause = " AND ".join([f"`{col}` = %s" for col in pk_cols])
+        query = f"SELECT * FROM `{table_name}` WHERE {where_clause}"
+        
+        self.cursor.execute(query, pk_values)
+        return self.cursor.fetchone()
+
+    def compare_data_row(self, dump_row: dict, db_row: dict, table_name: str, pk_cols: list[str]) -> str | None:
+        """Compares a row from the dump with a row from the DB and generates an UPDATE statement if different."""
+        updates = []
+        params = []
+        pk_values = []
+
+        for col_name, dump_val in dump_row.items():
+            db_val = db_row.get(col_name)
+
+            # Basic normalization for comparison
+            # This is a simplification. A robust solution would handle types more carefully.
+            # For example, comparing datetimes, decimals, etc.
+            dump_val_str = str(dump_val) if dump_val is not None else None
+            db_val_str = str(db_val) if db_val is not None else None
+
+            if dump_val_str != db_val_str:
+                if col_name not in pk_cols:
+                    updates.append(f"`{col_name}` = %s")
+                    params.append(dump_val)
+        
+        if not updates:
+            return None
+
+        for col in pk_cols:
+            pk_values.append(dump_row[col])
+        
+        params.extend(pk_values)
+        
+        where_clause = " AND ".join([f"`{col}` = %s" for col in pk_cols])
+        update_stmt = f"UPDATE `{table_name}` SET {', '.join(updates)} WHERE {where_clause};"
+        
+        # This is a simplified representation. A real implementation would execute this with parameters.
+        # For diff generation, we format it into a readable SQL string.
+        def format_value(v):
+            if v is None: return "NULL"
+            if isinstance(v, (int, float)): return str(v)
+            return f"'{str(v).replace('\'', '\'\'')}'"
+
+        final_params = [format_value(p) for p in params]
+        return update_stmt.replace('%s', '{}').format(*final_params)
+
+    def run(self):
+        self.connect_db()
+        with open_maybe_compressed(self.args['inpath'], "rt") as fin, \
+             open(self.args['outpath'], "w", encoding="utf-8") as fout:
+            
+            fout.write(f"-- Diff generated by SqlDumpOptimizer\n"
+                       f"-- Source: {os.path.basename(self.args['inpath'])}\n"
+                       f"-- Database: {self.args['db_name']}\n--\n\n")
+
+            # First pass: Schema and Data
+            for stype, stmt in iter_statements(fin):
+                if stype == "create":
+                    m = re.search(r"CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?`?(?P<name>[^`\s\(;]+)`?", stmt, re.I)
+                    if not m: continue
+                    tname = self.handler.normalize_table_name(m.group("name"))
+                    self.create_map[tname] = {"stmt": stmt, "cols": [], "pk": []}
+                    
+                    dump_cols = self.handler.extract_full_column_definitions(stmt)
+                    self.create_map[tname]["cols"] = list(dump_cols.keys())
+                    self.create_map[tname]["pk"] = self.handler.extract_primary_key(stmt)
+
+                    db_cols = self.get_db_schema(tname)
+
+                    if not db_cols:
+                        if not self.args.get('insert_only'):
+                            fout.write(f"-- Table `{tname}` does not exist in the database.\n{stmt};\n\n")
+                    else:
+                        if not self.args.get('insert_only'):
+                            alter_statements = self.compare_schemas(dump_cols, db_cols, tname)
+                            if alter_statements:
+                                fout.write(f"-- Schema changes for table `{tname}`\n")
+                                fout.write("\n".join(alter_statements))
+                                fout.write("\n\n")
+                
+                elif stype == "insert" and self.args.get('diff_data'):
+                    tname = extract_table_from_insert(stmt, self.handler)
+                    if not tname or tname not in self.create_map: continue
+
+                    table_info = self.create_map[tname]
+                    if not table_info.get("pk"):
+                        if self.args.get('verbose'): print(_("[WARN] Skipping data diff for table `{tname}`: no primary key found.").format(tname=tname))
+                        table_info["pk_checked"] = True
+                        continue
+                    
+                    if "db_pks" not in table_info:
+                        table_info["db_pks"] = self.get_db_primary_keys(tname, table_info["pk"])
+                        table_info["dump_pks"] = set()
+
+                    _, values_body = extract_values_from_insert(stmt)
+                    if not values_body: continue
+
+                    for tuple_str in SqlTupleParser(values_body):
+                        dump_row_list = self._parse_single_tuple_to_fields(tuple_str)
+                        dump_row_dict = dict(zip(table_info["cols"], dump_row_list))
+                        
+                        pk_values = tuple(str(dump_row_dict.get(c)) for c in table_info["pk"])
+                        table_info["dump_pks"].add(pk_values)
+
+                        if pk_values not in table_info["db_pks"]:
+                            fout.write(f"INSERT INTO `{tname}` ({', '.join(f'`{c}`' for c in table_info['cols'])}) VALUES ({', '.join(self._format_sql_value(v) for v in dump_row_list)});\n")
+                        elif not self.args.get('insert_only'): # Only do UPDATEs if not in insert-only mode
+                            db_row = self.get_db_row_by_pk(tname, table_info["pk"], pk_values)
+                            if db_row:
+                                update_stmt = self.compare_data_row(dump_row_dict, db_row, tname, table_info["pk"])
+                                if update_stmt:
+                                    fout.write(f"{update_stmt}\n")
+            
+            # Second pass: Generate DELETES
+            # Skip if in insert-only mode
+            if self.args.get('diff_data') and not self.args.get('insert_only'):
+                fout.write("\n-- Deleting rows that exist in the database but not in the dump\n")
+                for tname, table_info in self.create_map.items():
+                    if "db_pks" in table_info and "dump_pks" in table_info:
+                        pks_to_delete = table_info["db_pks"] - table_info["dump_pks"]
+                        if pks_to_delete:
+                            pk_cols = table_info["pk"]
+                            for pk_tuple in pks_to_delete:
+                                where_clause = " AND ".join(f"`{col}` = {self._format_sql_value(val)}" for col, val in zip(pk_cols, pk_tuple))
+                                fout.write(f"DELETE FROM `{tname}` WHERE {where_clause};\n")
+
+        if self.cursor: self.cursor.close()
+        if self.connection and self.connection.is_connected():
+            self.connection.close()
+        if self.progress: self.progress.close()
+        print(_("Done. Diff saved to: {path}").format(path=self.args['outpath']))
+
+    def _parse_single_tuple_to_fields(self, tuple_str: str) -> list[str | None]:
+        """Parses a SQL tuple string into a list of field values, handling quotes and NULL."""
+        parser = SqlTupleParser(tuple_str)
+        fields = []
+        for field_str in parser:
+            field_str = field_str.strip()
+            if field_str.upper() == 'NULL':
+                fields.append(None)
+            elif (field_str.startswith("'") and field_str.endswith("'")):
+                # Un-escape quotes inside the string
+                fields.append(field_str[1:-1].replace("''", "'").replace('\\"', '"'))
+            else:
+                fields.append(field_str)
+        return fields
+
+    def _format_sql_value(self, v):
+        if v is None: return "NULL"
+        if isinstance(v, (int, float)): return str(v)
+        return f"'{str(v).replace('\'', '\'\'')}'"
+
 def optimize_dump(**kwargs):
-    optimizer = DumpOptimizer(**kwargs)
-    optimizer.run()
+    if kwargs.get('diff_from_db'):
+        differ = DatabaseDiffer(**kwargs)
+        differ.run()
+    else:
+        optimizer = DumpOptimizer(**kwargs)
+        optimizer.run()
 
 # ---------- CLI ----------
 def main():
-    global _
-    APP_NAME = "optimize_sql_dump"
-    LOCALE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'locale')
-    
-    try:
-        translation = gettext.translation(APP_NAME, localedir=LOCALE_DIR, fallback=True)
-        _ = translation.gettext
-    except FileNotFoundError:
-        # fallback to default gettext if no .mo file is found
-        pass
-
     p = argparse.ArgumentParser(
         description=_("SQL Dump Optimizer: merges INSERTs, detects compression, supports MySQL/Postgres.")
     )
@@ -761,6 +1080,7 @@ def main():
         "--load-data",
         nargs="?",
         const=".",
+        dest="load_data_dir",
         help=_("[MySQL ONLY] Generate .sql and .tsv files for LOAD DATA INFILE. "
         "Requires a directory (defaults to current). Mutually exclusive with --output and --split."),
     )
@@ -770,12 +1090,36 @@ def main():
         default=200,
         help=_("[--load-data ONLY] Number of rows buffered before writing to the .tsv file (default: 200)"),
     )
+    p.add_argument(
+        "--insert-only",
+        nargs="?",
+        const=".",
+        help=_("Generate insert-only files per table, each containing TRUNCATE and INSERTs. "
+        "If a directory is provided, files will be saved there. "
+        "If no value is given, use the current directory. "
+        "Mutually exclusive with other output modes."),
+    )
+    
+    # --- Diffing Arguments Group ---
+    diff_group = p.add_argument_group(_('Database Diffing (Experimental)'))
+    diff_group.add_argument(
+        "--diff-from-db", action="store_true",
+        help=_("Generate a diff SQL file by comparing the dump against a live database.")
+    )
+    diff_group.add_argument(
+        "--diff-data", action="store_true",
+        help=_("Also compare table data and generate INSERT/UPDATE/DELETE statements (requires --diff-from-db).")
+    )
+    diff_group.add_argument("--db-host", default="localhost", help=_("Database host for diffing."))
+    diff_group.add_argument("--db-user", help=_("Database user for diffing."))
+    diff_group.add_argument("--db-password", help=_("Database password for diffing."))
+    diff_group.add_argument("--db-name", help=_("Database name for diffing."))
     
     args = p.parse_args()
 
     if args.positional and not args.input:
         args.input = args.positional[0]
-        if len(args.positional) > 1 and not args.output and not args.split and not args.load_data:
+        if len(args.positional) > 1 and not args.output and not args.split and not args.load_data_dir and not args.insert_only:
             args.output = args.positional[1]
 
     if not args.input:
@@ -785,26 +1129,50 @@ def main():
         print(_("File not found: {path}").format(path=args.input))
         sys.exit(2)
 
-    if args.load_data and (args.output or args.split):
-        p.error(_("The --load-data option cannot be used with --output or --split."))
+    # --- Argument validation logic ---
+    # --output is required by --diff-from-db, so don't count it as a separate mode in that case.
+    output_mode_val = args.output if not args.diff_from_db else None
+    primary_modes = [output_mode_val, args.split, args.load_data_dir, args.diff_from_db]
+    num_primary_modes = sum(1 for mode in primary_modes if mode is not None)
 
-    if not args.output and not args.split and not args.load_data:
-        p.error(_("You must specify an output mode: --output <file>, --split [dir], or --load-data [dir]."))
-    if args.output and (args.split or args.load_data):
-        p.error(_("The --output option cannot be used with --split or --load-data."))
+    if args.insert_only:
+        if num_primary_modes == 0: # Standalone --insert-only mode
+            pass
+        elif num_primary_modes == 1 and args.diff_from_db: # --insert-only as a modifier for --diff-from-db
+            pass
+        else:
+            p.error(_("--insert-only can be used either standalone or with --diff-from-db, but not with other output modes."))
+    elif num_primary_modes == 0:
+        p.error(_("You must specify an output mode like --output, --split, --diff-from-db, etc."))
+    elif num_primary_modes > 1:
+        p.error(_("Primary output modes (--output, --split, --load-data, --diff-from-db) are mutually exclusive."))
 
-    optimize_dump(
-        inpath=args.input,
-        outpath=args.output,
-        db_type=args.db_type,
-        target_table=args.table,
-        batch_size=args.batch_size,
-        verbose=args.verbose,
-        dry_run=args.dry_run,
-        split_dir=args.split, 
-        load_data_dir=args.load_data, 
-        tsv_buffer_size=args.tsv_buffer_size
-    )
+    if args.diff_from_db:
+        if not mysql:
+            p.error(_("The 'mysql-connector-python' library is required for --diff-from-db. Please install it using: pip install mysql-connector-python"))
+        if not args.output:
+            p.error(_("--diff-from-db requires --output to be specified."))
+        if not args.db_user or not args.db_name:
+            p.error(_("--diff-from-db requires --db-user and --db-name."))
+        if args.db_type != "mysql" and args.db_type != "auto":
+            p.error(_("--diff-from-db currently only supports MySQL."))
+        if args.diff_data and not args.diff_from_db:
+            p.error(_("--diff-data can only be used with --diff-from-db."))
+        args.db_type = "mysql" # Force mysql for diff
+
+
+    # Convert argparse.Namespace to a dictionary
+    kwargs = vars(args)
+    # Rename keys to match function signature
+    kwargs['inpath'] = kwargs.pop('input')
+    kwargs['outpath'] = kwargs.pop('output')
+    kwargs['target_table'] = kwargs.pop('table')
+    kwargs['split_dir'] = kwargs.pop('split')
+    
+    # Remove keys that are not part of the function signatures
+    kwargs.pop('positional', None)
+
+    optimize_dump(**kwargs)
 
 
 if __name__ == "__main__":
