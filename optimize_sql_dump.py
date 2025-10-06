@@ -772,6 +772,7 @@ class DatabaseDiffer:
 
     def _setup_progress(self):
         global progress
+        global _
         filesize = os.path.getsize(self.args['inpath'])
         if self.args.get('verbose') and tqdm:
             progress = tqdm(total=filesize, unit="B", unit_scale=True, desc=_("Parsing dump for diff"))
@@ -781,6 +782,7 @@ class DatabaseDiffer:
 
     def connect_db(self):
         try:
+            global _
             self.connection = mysql.connector.connect(
                 host=self.args['db_host'],
                 user=self.args['db_user'],
@@ -849,6 +851,7 @@ class DatabaseDiffer:
 
     def get_db_primary_keys(self, table_name: str, pk_cols: list[str]) -> set:
         """Fetches all primary key values from a database table."""
+        global _
         if not self.connection or not pk_cols: return set()
         
         pk_cols_str = ", ".join([f"`{c}`" for c in pk_cols])
@@ -917,6 +920,7 @@ class DatabaseDiffer:
         return update_stmt.replace('%s', '{}').format(*final_params)
 
     def run(self):
+        global _
         self.connect_db()
         with open_maybe_compressed(self.args['inpath'], "rt") as fin, \
              open(self.args['outpath'], "w", encoding="utf-8") as fout:
