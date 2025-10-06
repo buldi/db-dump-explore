@@ -20,9 +20,9 @@ update_pot_file() {
     echo "1. Aktualizowanie pliku szablonu '${POT_FILE}' z '${SOURCE_FILE}'..."
     # Używamy opcji, aby upewnić się, że plik .pot jest generowany z nagłówkiem UTF-8
     xgettext --keyword=_ --from-code=UTF-8 -d "${APP_NAME}" -o "${POT_FILE}" \
-        --add-comments="TRANSLATORS:" \
+        --add-comments="TRANSLATORS:" -L Python \
         --package-name="${APP_NAME}" --msgid-bugs-address="dobrakowskirafal@gmail.com" "${SOURCE_FILE}"
-    
+
     # Wymuś kodowanie UTF-8 w nagłówku pliku .pot, aby uniknąć błędów
     sed -i 's/charset=CHARSET/charset=UTF-8/' "${POT_FILE}"
     echo "   ...Gotowe."
