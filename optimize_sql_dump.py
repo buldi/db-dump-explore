@@ -36,20 +36,18 @@ try:
     import mysql.connector
 except ImportError:
     mysql = None
-    tqdm = None
-
-
-# ---------- Localization setup ----------
-APP_NAME = "optimize_sql_dump"
-LOCALE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'locale')
 
 try:
     # Set user locale from the operating system
     locale.setlocale(locale.LC_ALL, "")
 except (locale.Error, IndexError):
-    pass # Keep default locale if setting fails
+    pass  # Keep default locale if setting fails
 
 import gettext
+
+# ---------- Localization setup ----------
+APP_NAME = "optimize_sql_dump"
+LOCALE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'locale')
 
 try:
     # Find and load the translation file
@@ -66,6 +64,11 @@ MAGIC_TYPES = [
     (b"\xfd7zXZ\x00", "xz"),
     (b"PK\x03\x04", "zip"),
 ]
+
+
+def setup_app_locale():
+    pass
+    # raise NotImplementedError
 
 
 def detect_compression(path):
@@ -132,11 +135,15 @@ class MySQLTypeValidator(TypeValidator):
         return None
 
     def validate(self, value: str, column_type: str) -> str:
-    # Simple validation for example. Can be extended with more types.
-    # MySQL 8+ is more strict about date/time format.
+        """
+        Simple validation for example. Can be extended with more types.
+        MySQL 8+ is more strict about date/time format.
+        """
         if column_type.startswith("DATETIME") or column_type.startswith("TIMESTAMP"):
-            # This validation is simplified. Proper handling would require date parsing.
-            # For now, we check if the value is not an empty string, which can be problematic.
+            """
+            This validation is simplified. Proper handling would require date parsing.
+            For now, we check if the value is not an empty string, which can be problematic.
+            """
             if value.strip("'\"") == "":
                 return "NULL"
         return value
@@ -272,7 +279,7 @@ class MySQLHandler(DatabaseHandler):
         m = re.search(r"PRIMARY\s+KEY\s*\(([^)]+)\)", create_stmt, re.I)
         if not m:
             return []
-        
+
         pk_blob = m.group(1)
         # Remove potential key length specifications like `col_name`(255)
         pk_cols = [re.sub(r'\s*\(\d+\)', '', c.strip()).strip('`"') for c in pk_blob.split(',')]
@@ -331,6 +338,7 @@ class SqlTupleParser:
         self.pos = 0
         self.len = len(text)
 
+
     def __iter__(self):
         paren_level = 0
         in_single_quote = False
@@ -384,13 +392,15 @@ class SqlTupleParser:
             if end_pos != -1:
                 yield self.text[start:end_pos].strip()
 
+
 def parse_sql_values_to_tsv_row(tuple_str: str) -> str:
     """Converts an SQL tuple (as a string) to a TSV row."""
     parser = SqlTupleParser(tuple_str)
     fields = [field.strip("'\"`") for field in parser]
     return "\t".join(r'\N' if f.upper() == 'NULL' else f.replace('\\', '\\\\').replace('\t', '\\t').replace('\n', '\\n').replace('\r', '\\r') for f in fields)
-
 # ---------- SQL Parser ----------
+
+
 class StatementParser:
     def __init__(self, stream):
         self.stream = stream
@@ -464,7 +474,7 @@ class StatementParser:
     def _emit_statement(self):
         text = "".join(self.buf).strip()
         self.buf = []
-        
+
         # Reset state for the next statement
         self.in_single_quote, self.in_double_quote, self.in_backtick, self.is_escaped, self.paren_level = False, False, False, False, 0
 
@@ -479,7 +489,7 @@ class StatementParser:
                 self.copy_table_name = m.group("name").strip().strip('"')
                 self.in_copy_data = True
                 return "copy_start", text
-        
+
         return "other", text
 
 def iter_statements(stream):
@@ -574,7 +584,7 @@ class DumpOptimizer:
                 self.file_map[tname] = writer
                 if self.args.get('verbose'):
                     print(_("[INFO] Created file {fname}").format(fname=fname))
-        
+
         if self.load_data_mode: return self.file_map[tname]['sql']
         if self.split_mode or self.insert_only_mode: return self.file_map[tname]
         return None # Should not happen if logic is correct
@@ -593,7 +603,7 @@ class DumpOptimizer:
 
     def _flush_tsv_buffer(self, tname, force=False):
         if tname not in self.file_map: return
-        
+
         tsv_info = self.file_map[tname]
         tsv_buffer_size = self.args.get('tsv_buffer_size', 200)
         if tsv_info.get('tsv_buffer') and (force or len(tsv_info['tsv_buffer']) >= tsv_buffer_size):
@@ -674,7 +684,7 @@ class DumpOptimizer:
 
         cols_match = re.search(r"INSERT\s+INTO\s+[^\(]+(\([^\)]*\))\s*VALUES", prefix, re.I | re.S)
         cols_text = cols_match.group(1).strip() if cols_match else self.handler.extract_columns_from_create(self.create_map.get(tname, ""))
-        
+
         tuples = list(SqlTupleParser(values_body)) if values_body else []
         if not tuples:
             writer.write(stmt)
@@ -688,7 +698,7 @@ class DumpOptimizer:
 
     def _handle_copy(self, stype, stmt):
         if not self.load_data_mode: return
-        
+
         target_table = self.args.get('target_table')
         if stype == "copy_start":
             tname = extract_table_from_insert(stmt, self.handler)
@@ -730,7 +740,7 @@ class DumpOptimizer:
 
             for t in list(self.insert_buffers.keys()):
                 self._flush_insert_buffer(t)
-        
+
         self.finalize()
 
     def finalize(self):
@@ -752,7 +762,7 @@ class DumpOptimizer:
 
         if self.args.get('verbose'):
             print(_("[INFO] Wrote {rows} records in {batches} batches.").format(rows=self.total_rows, batches=self.total_batches))
-        
+
         if not self.args.get('dry_run') and not self.split_mode and not self.load_data_mode:
             print(_("Done. Saved to: {path}").format(path=self.args['outpath']))
         elif self.split_mode:
@@ -761,7 +771,7 @@ class DumpOptimizer:
             print(_("Done. Generated files for import in directory: {path}").format(path=self.args['load_data_dir']))
         elif self.insert_only_mode:
             print(_("Done. Generated insert-only files in directory: {path}").format(path=self.args['insert_only']))
-        
+
         if self.progress:
             self.progress.close()
 
@@ -806,7 +816,7 @@ class DumpAnalyzer:
                         _, values_body = extract_values_from_insert(stmt)
                         if values_body:
                             self.stats[tname]['rows'] += len(list(SqlTupleParser(values_body)))
-        
+
         if self.progress: self.progress.close()
         self.print_summary()
 
@@ -821,6 +831,7 @@ class DumpAnalyzer:
         print("-" * 82)
         print(_("Found {num_tables} tables with a total of {total_rows} rows.").format(num_tables=len(self.stats), total_rows=f'{total_rows:,d}'))
         print("---------------------------\n")
+
 
 class DatabaseDiffer:
     def __init__(self, **kwargs):
@@ -904,11 +915,11 @@ class DatabaseDiffer:
                      db_def_parts.append("DEFAULT NULL")
                 if db_col_info['EXTRA']:
                     db_def_parts.append(db_col_info['EXTRA'])
-                
+
                 # Normalize and compare. This is a heuristic.
                 normalized_dump_def = ' '.join(dump_def.lower().split())
                 normalized_db_def = ' '.join(' '.join(db_def_parts).lower().split())
-                
+
                 # A simple string comparison is not robust. Let's check for major differences.
                 # For this example, we'll just trigger a MODIFY if the type is different.
                 if db_col_info['COLUMN_TYPE'].lower() not in normalized_dump_def:
@@ -921,17 +932,17 @@ class DatabaseDiffer:
         """Fetches all primary key values from a database table."""
         global _
         if not self.connection or not pk_cols: return set()
-        
+
         pk_cols_str = ", ".join([f"`{c}`" for c in pk_cols])
         query = f"SELECT {pk_cols_str} FROM `{table_name}`"
         self.cursor.execute(query)
-        
+
         keys = set()
         for row in self.cursor.fetchall():
             # Create a tuple of PK values, converting non-string types to string for consistent hashing
             pk_tuple = tuple(str(row[c]) for c in pk_cols)
             keys.add(pk_tuple)
-        
+
         if self.args.get('verbose'):
             print(_("[INFO] Fetched {count} primary keys for table `{tname}`.").format(count=len(keys), tname=table_name))
         return keys
@@ -942,7 +953,7 @@ class DatabaseDiffer:
 
         where_clause = " AND ".join([f"`{col}` = %s" for col in pk_cols])
         query = f"SELECT * FROM `{table_name}` WHERE {where_clause}"
-        
+
         self.cursor.execute(query, pk_values)
         return self.cursor.fetchone()
 
@@ -954,10 +965,11 @@ class DatabaseDiffer:
 
         for col_name, dump_val in dump_row.items():
             db_val = db_row.get(col_name)
-
-            # Basic normalization for comparison
-            # This is a simplification. A robust solution would handle types more carefully.
-            # For example, comparing datetimes, decimals, etc.
+            """
+            Basic normalization for comparison
+            This is a simplification. A robust solution would handle types more carefully.
+            For example, comparing datetimes, decimals, etc.
+            """
             dump_val_str = str(dump_val) if dump_val is not None else None
             db_val_str = str(db_val) if db_val is not None else None
 
@@ -965,18 +977,18 @@ class DatabaseDiffer:
                 if col_name not in pk_cols:
                     updates.append(f"`{col_name}` = %s")
                     params.append(dump_val)
-        
+
         if not updates:
             return None
 
         for col in pk_cols:
             pk_values.append(dump_row[col])
-        
+
         params.extend(pk_values)
-        
+
         where_clause = " AND ".join([f"`{col}` = %s" for col in pk_cols])
         update_stmt = f"UPDATE `{table_name}` SET {', '.join(updates)} WHERE {where_clause};"
-        
+
         # This is a simplified representation. A real implementation would execute this with parameters.
         # For diff generation, we format it into a readable SQL string.
         def format_value(v):
@@ -993,7 +1005,7 @@ class DatabaseDiffer:
         self.connect_db()
         with open_maybe_compressed(self.args['inpath'], "rt") as fin, \
              open(self.args['outpath'], "w", encoding="utf-8") as fout:
-            
+
             fout.write(f"-- Diff generated by SqlDumpOptimizer\n"
                        f"-- Source: {os.path.basename(self.args['inpath'])}\n"
                        f"-- Database: {self.args['db_name']}\n--\n\n")
@@ -1005,7 +1017,7 @@ class DatabaseDiffer:
                     if not m: continue
                     tname = self.handler.normalize_table_name(m.group("name"))
                     self.create_map[tname] = {"stmt": stmt, "cols": [], "pk": [], "exists_in_db": True}
-                    
+
                     dump_cols = self.handler.extract_full_column_definitions(stmt)
                     self.create_map[tname]["cols"] = list(dump_cols.keys())
                     self.create_map[tname]["pk"] = self.handler.extract_primary_key(stmt)
@@ -1027,7 +1039,7 @@ class DatabaseDiffer:
                                 fout.write(f"-- Schema changes for table `{tname}`\n")
                                 fout.write("\n".join(alter_statements))
                                 fout.write("\n\n")
-                
+
                 elif stype == "insert" and self.args.get('diff_data'):
                     tname = extract_table_from_insert(stmt, self.handler)
                     if not tname or tname not in self.create_map: continue
@@ -1048,7 +1060,7 @@ class DatabaseDiffer:
                         if self.args.get('verbose'): print(_("[WARN] Skipping data diff for table `{tname}`: no primary key found.").format(tname=tname))
                         table_info["pk_checked"] = True
                         continue
-                    
+
                     if "db_pks" not in table_info:
                         if progress:
                             progress.set_description(_("Diffing data for {tname}").format(tname=tname))
@@ -1062,7 +1074,7 @@ class DatabaseDiffer:
                     for tuple_str in SqlTupleParser(values_body):
                         dump_row_list = self._parse_single_tuple_to_fields(tuple_str)
                         dump_row_dict = dict(zip(table_info["cols"], dump_row_list))
-                        
+
                         pk_values = tuple(str(dump_row_dict.get(c)) for c in table_info["pk"])
                         table_info["dump_pks"].add(pk_values)
 
@@ -1076,7 +1088,7 @@ class DatabaseDiffer:
                                 if update_stmt:
                                     self.summary["rows_updated"] += 1
                                     fout.write(f"{update_stmt}\n")
-            
+
             # Second pass: Generate DELETES
             if progress:
                 progress.set_description(_("Generating DELETE statements"))
@@ -1131,6 +1143,7 @@ class DatabaseDiffer:
         if isinstance(v, (int, float)): return str(v)
         return f"'{str(v).replace('\'', '\'\'')}'"
 
+
 def optimize_dump(**kwargs):
     if kwargs.get('diff_from_db'):
         differ = DatabaseDiffer(**kwargs)
@@ -1142,57 +1155,55 @@ def optimize_dump(**kwargs):
         optimizer = DumpOptimizer(**kwargs)
         optimizer.run()
 
-# ---------- CLI ----------
-def main():
-    # --- Configuration File Loading ---
+
+def _load_config(config_file='optimize_sql_dump.ini'):
+    """Loads configuration from an INI file and returns it as a dictionary."""
     config = configparser.ConfigParser(allow_no_value=True)
-    # Use a specific name as requested
-    config_file = 'optiomize_sql_dump.ini'
     config_defaults = {}
+
+    # Define which keys from the config are boolean flags.
+    # argparse 'dest' names are used here.
+    boolean_flags = {'verbose', 'dry_run', 'diff_from_db', 'diff_data', 'info'}
+    # These can act as flags or take a value, but in the INI they are treated as booleans if present
+    boolean_like_flags = {'split', 'load_data_dir', 'insert_only'}
 
     if os.path.exists(config_file):
         config.read(config_file)
-        
-        # Mapping from INI key to argparse 'dest'
-        # Using dicts for sections for clarity
-        general_mapping = {
-            'db-type': 'db_type',
-            'table': 'table',
-            'batch-size': 'batch_size',
-            'verbose': 'verbose',
-            'dry-run': 'dry_run',
-            'split': 'split',
-            'load-data': 'load_data_dir',
-            'tsv-buffer-size': 'tsv_buffer_size',
-            'insert-only': 'insert_only',
-        }
-        diff_mapping = {
-            'diff-from-db': 'diff_from_db',
-            'diff-data': 'diff_data',
-            'db-host': 'db_host',
-            'db-user': 'db_user',
-            'db-password': 'db_password',
-            'db-name': 'db_name',
-        }
+        _parse_config_sections(config, config_defaults, boolean_flags, boolean_like_flags)
 
-        def load_section(section_name, mapping):
-            if section_name in config:
-                for key, dest in mapping.items():
-                    if key in config[section_name]:
-                        # Handle boolean flags that don't have a value in INI
-                        if config[section_name][key] is None or config.getboolean(section_name, key):
-                            config_defaults[dest] = True
-                        # Handle other values
-                        elif config[section_name][key]:
-                             config_defaults[dest] = config[section_name][key]
+    return config_defaults
 
-        load_section('optimize', general_mapping)
-        load_section('diff', diff_mapping)
 
-    # --- Argument Parser Setup ---
-    p = argparse.ArgumentParser(
-        description=_("SQL Dump Optimizer: merges INSERTs, detects compression, supports MySQL/Postgres.")
-    )
+def _parse_config_sections(config, config_defaults, boolean_flags, boolean_like_flags):
+    """Parses sections from the config file into the defaults dictionary."""
+    general_mapping = {
+        'db-type': 'db_type', 'table': 'table', 'batch-size': 'batch_size',
+        'verbose': 'verbose', 'dry-run': 'dry_run', 'split': 'split',
+        'load-data': 'load_data_dir', 'tsv-buffer-size': 'tsv_buffer_size',
+        'insert-only': 'insert_only',
+    }
+    diff_mapping = {
+        'diff-from-db': 'diff_from_db', 'diff-data': 'diff_data',
+        'db-host': 'db_host', 'db-user': 'db_user',
+        'db-password': 'db_password', 'db-name': 'db_name',
+    }
+
+    def load_section(section_name, mapping):
+        if section_name not in config:
+            return
+        for key, dest in mapping.items():
+            if key in config[section_name]:
+                if dest in boolean_flags or dest in boolean_like_flags:
+                    if config[section_name][key] is None or config.getboolean(section_name, key):
+                        config_defaults[dest] = True
+                else:
+                    config_defaults[dest] = config.get(section_name, key)
+
+    load_section('optimize', general_mapping)
+    load_section('diff', diff_mapping)
+
+
+def _create_arg_parser(p :argparse.ArgumentParser) -> argparse.ArgumentParser:
     p.add_argument(
         "positional",
         nargs="*",
@@ -1203,23 +1214,24 @@ def main():
     p.add_argument(
         "--db-type",
         choices=["auto", "mysql", "postgres"],
-        default="auto",
         help=_("Database dialect: mysql/postgres or auto (default)"),
     )
     p.add_argument(
         "--table",
         "-t",
-        default=None,
+        type=str,
         help=_("If specified, optimize only this table (name without schema)"),
     )
     p.add_argument(
         "--batch-size",
         type=int,
-        default=1000,
         help=_("Number of tuples in a single merged INSERT (default: 1000)"),
     )
     p.add_argument(
-        "--verbose", "-v", action="store_true", help=_("Print diagnostic information")
+        "--verbose",
+        "-v",
+        action="store_true",
+        help=_("Print diagnostic information")
     )
     p.add_argument(
         "--dry-run",
@@ -1245,7 +1257,6 @@ def main():
     p.add_argument(
         "--tsv-buffer-size",
         type=int,
-        default=200,
         help=_("[--load-data ONLY] Number of rows buffered before writing to the .tsv file (default: 200)"),
     )
     p.add_argument(
@@ -1262,8 +1273,7 @@ def main():
         action="store_true",
         help=_("Analyze the dump file and print a summary of its contents (tables, rows) without writing any files.")
     )
-    
-    # --- Diffing Arguments Group ---
+
     diff_group = p.add_argument_group(_('Database Diffing (Experimental)'))
     diff_group.add_argument(
         "--diff-from-db", action="store_true",
@@ -1273,16 +1283,15 @@ def main():
         "--diff-data", action="store_true",
         help=_("Also compare table data and generate INSERT/UPDATE/DELETE statements (requires --diff-from-db).")
     )
-    diff_group.add_argument("--db-host", default="localhost", help=_("Database host for diffing."))
+    diff_group.add_argument("--db-host", help=_("Database host for diffing."))
     diff_group.add_argument("--db-user", help=_("Database user for diffing."))
     diff_group.add_argument("--db-password", help=_("Database password for diffing."))
     diff_group.add_argument("--db-name", help=_("Database name for diffing."))
-    
-    args = p.parse_args()
+    return p
 
-    # Apply defaults from config file. Command-line args will have already been parsed and will override these.
-    p.set_defaults(**config_defaults)
 
+def _validate_args(p, args):
+    """Validates parsed arguments, handling dependencies and mutual exclusions."""
     if args.positional and not args.input:
         args.input = args.positional[0]
         if len(args.positional) > 1 and not args.output and not args.split and not args.load_data_dir and not args.insert_only:
@@ -1295,21 +1304,19 @@ def main():
         print(_("File not found: {path}").format(path=args.input))
         sys.exit(2)
 
-    # Automatically add .sql extension to output file if missing
     if args.output and not args.output.lower().endswith('.sql'):
         if args.verbose:
             print(_("[INFO] Output filename does not end with .sql, appending it. New name: {name}").format(name=args.output + '.sql'))
         args.output += '.sql'
-    # --- Argument validation logic ---
-    # --output is required by --diff-from-db, so don't count it as a separate mode in that case.
+
     output_mode_val = args.output if not args.diff_from_db else None
     primary_modes = [output_mode_val, args.split, args.load_data_dir, args.diff_from_db, args.info]
     num_primary_modes = sum(1 for mode in primary_modes if mode is not None)
 
     if args.insert_only:
-        if num_primary_modes == 0: # Standalone --insert-only mode
+        if num_primary_modes == 0:
             pass
-        elif num_primary_modes == 1 and (args.diff_from_db or args.info): # --insert-only as a modifier
+        elif num_primary_modes == 1 and (args.diff_from_db or args.info):
             pass
         else:
             p.error(_("--insert-only can be used either standalone or with --diff-from-db/--info, but not with other output modes."))
@@ -1329,9 +1336,45 @@ def main():
             p.error(_("--diff-from-db currently only supports MySQL."))
         if args.diff_data and not args.diff_from_db:
             p.error(_("--diff-data can only be used with --diff-from-db."))
-        args.db_type = "mysql" # Force mysql for diff
+        args.db_type = "mysql"  # Force mysql for diff
 
 
+def set_parse_arguments_and_config():
+    global _
+
+    """Creates and configures the argument parser."""
+    parser = argparse.ArgumentParser(
+        description=_("SQL Dump Optimizer: merges INSERTs, detects compression, supports MySQL/Postgres.")
+    )
+
+    # Then, load defaults from config file (will override hardcoded ones)
+    config_defaults = _load_config()
+    parser.set_defaults(**config_defaults)
+
+    parser = _create_arg_parser(parser)
+
+    # Set hardcoded defaults first
+    parser.set_defaults(
+        db_type="auto",
+        table=None,
+        batch_size=1000,
+        tsv_buffer_size=200,
+        db_host="localhost"
+    )
+
+    # Finally, parse args from command line (will override all previous defaults)
+    args = parser.parse_args()
+    _validate_args(parser, args)
+    return args
+
+
+# ---------- CLI ----------
+def main():
+    global _
+
+    setup_app_locale()
+
+    args = set_parse_arguments_and_config()
     # Convert argparse.Namespace to a dictionary
     kwargs = vars(args)
     # Rename keys to match function signature
@@ -1339,7 +1382,6 @@ def main():
     kwargs['outpath'] = kwargs.pop('output')
     kwargs['target_table'] = kwargs.pop('table')
     kwargs['split_dir'] = kwargs.pop('split')
-    
     # Remove keys that are not part of the function signatures
     kwargs.pop('positional', None)
 
