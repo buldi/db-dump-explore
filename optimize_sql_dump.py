@@ -342,15 +342,6 @@ class PostgresHandler(DatabaseHandler):
             fallback_regex=r"CREATE\s+TABLE[^\(]*\(([\s\S]*?)\)\s*;",
         )
 
-    # def extract_columns_from_create(self, create_stmt: str) -> str:
-    #     return self._extract_columns_from_create_base(
-    #         create_stmt,
-    #         body_regex=r"CREATE\s+TABLE[^\(]*\((.*)\)\s*;",
-    #         ignore_regex=r"PRIMARY\s+KEY|UNIQUE|CONSTRAINT|CHECK",
-    #         quote_char='"',
-    #         process_colname_func=lambda c: c.strip('"'),
-    #     )
-
 
 class SqlMultiTupleParser:
     """
@@ -454,39 +445,29 @@ def parse_sql_values_to_tsv_row(sql_tuple):
     """
     Convert an SQL tuple string like "(1, 'a', NULL, '\\n')" to a TSV row string.
     """
-    # Strip surrounding parentheses and optional trailing semicolon
-    s = sql_tuple.strip()
-    has_semicolon = s.endswith(";")
-    if has_semicolon:
-        s = s[:-1]
-    if s.startswith("(") and s.endswith(")"):
-        s = s[1:-1]
-
-    fields = list(SqlTupleFieldParser("(" + s + ")"))
+    fields = list(SqlTupleFieldParser(sql_tuple))
     tsv_fields = []
     for field in fields:
         if field == "NULL":
+            # \n is the default representation of NULL for LOAD DATA INFILE
             tsv_fields.append("\\n")
         else:
             # Remove surrounding single quotes if present
             if field.startswith("'") and field.endswith("'"):
                 inner = field[1:-1]
                 # SQL string literal escapes use backslashes; we must convert them to literal sequences
-                # For TSV we want:
-                #  - escaped newline (\n) to be represented as two characters backslash + n -> "\\n"
-                #  - escaped tab (\t) -> "\\t"
-                #  - escaped single quote (\' ) -> "'"
-                #  - escaped backslash (\\) -> "\\" (single backslash) but represented literally in Python string
-                # We therefore perform replacements that convert SQL escape sequences into the literal backslash sequences
-                # except for escaped single quote which becomes a quote character.
-                inner = inner.replace("\\'", "'")   # \' -> '
-                # Replace escaped backslash first to avoid double-processing
-                inner = inner.replace("\\\\", "\\")  # \\ -> \
-                # Convert newline/tab escape sequences into literal backslash + letter so that when written to TSV
-                # they appear as backslash+n and backslash+t (matching test expectations).
-                inner = inner.replace("\n", "\\n").replace("\t", "\\t")
-                # If SQL provided them escaped as backslash+n/backslash+t, those are currently two-character sequences
-                # and should remain as backslash+n/backslash+t; no further change needed.
+                # The goal is to un-escape what SQL escapes for its string literals.
+                # \\ -> \
+                # \' -> '
+                # \" -> "
+                # \n -> newline character
+                # \t -> tab character
+                # etc.
+                # The order of replacement is important. Replace \\ first.
+                inner = inner.replace("\\\\", "\\")
+                inner = inner.replace("\\'", "'")
+                inner = inner.replace('\\"', '"')
+                inner = inner.replace("\\n", "\n").replace("\\t", "\t").replace("\\r", "\r").replace("\\b", "\b").replace("\\Z", "\x1a")
                 tsv_fields.append(inner)
             else:
                 tsv_fields.append(field)
@@ -720,23 +701,6 @@ class DumpOptimizer:
             else:
                 self.fout.write(stmt.strip() + "\n")
 
-    def _parse_single_tuple_to_fields_standalone(tuple_str: str) -> list[str | None]:
-        """Standalone version of DumpOptimizer._parse_single_tuple_to_fields for utility use."""
-        parser = SqlTupleFieldParser(tuple_str)
-        fields = []
-        for field_str in parser:
-            field_str = field_str.strip()
-            if field_str.upper() == 'NULL':
-                fields.append(None)
-            elif (field_str.startswith("'") and field_str.endswith("'")):
-                # Un-escape single quotes and backslashes
-                fields.append(field_str[1:-1].replace("''", "'").replace("\\'", "'").replace('\\"', '"').replace('\\\\', '\\'))
-            elif (field_str.startswith('"') and field_str.endswith('"')):
-                fields.append(field_str[1:-1].replace('""', '"').replace("\\'", "'").replace('\\"', '"').replace('\\\\', '\\'))
-            else:
-                fields.append(field_str)
-        return fields
-
 class DumpOptimizer:
     def __init__(self, **kwargs):
         self.args = kwargs
@@ -835,12 +799,14 @@ class DumpOptimizer:
                 self.fout.write(stmt.strip() + "\n")
 
     def _parse_single_tuple_to_fields(self, tuple_str: str) -> list[str | None]:
-        return _parse_single_tuple_to_fields_standalone(tuple_str)
+        # This is a simplified parser for the diffing logic, not for TSV generation.
+        return self._parse_single_tuple_to_fields_standalone(tuple_str)
 
     def _values_to_tsv_row(self, values: list[str | None]) -> str:
         processed_values = []
         for v in values:
-            processed_values.append(r'n' if v is None else str(v).replace('\\', '\\\\').replace('\t', '\\t').replace('\n', '\\n').replace('\r', '\\r'))
+            # For LOAD DATA, NULL is \n. Backslash, tab, newline must be escaped.
+            processed_values.append('\\n' if v is None else str(v).replace('\\', '\\\\').replace('\t', '\\t').replace('\n', '\\n').replace('\r', '\\r'))
         return "\t".join(processed_values)
 
     def _handle_insert(self, stmt):
@@ -856,8 +822,7 @@ class DumpOptimizer:
                 count = 0
                 try:
                     for tuple_str in SqlMultiTupleParser(values_body):
-                        fields = self._parse_single_tuple_to_fields(tuple_str)
-                        self.file_map[tname]['tsv_buffer'].append(self._values_to_tsv_row(fields))
+                        self.file_map[tname]['tsv_buffer'].append(parse_sql_values_to_tsv_row(tuple_str))
                         count += 1
                     self._flush_tsv_buffer(tname)
                     self.total_rows += count
