@@ -196,7 +196,7 @@ class DatabaseHandler(ABC):
         if not m:
             m = re.search(fallback_regex, create_stmt, re.S | re.I)
         if not m:
-            return ""
+            return ""  # Return empty string if no column definitions are found
         cols_blob = m.group(1)
         cols = []
         for line in cols_blob.splitlines():
@@ -335,7 +335,7 @@ class PostgresHandler(DatabaseHandler):
     def extract_columns_from_create(self, create_stmt: str) -> str:
         return self._extract_columns_from_create_base(
             create_stmt,
-            body_regex=r"CREATE\s+TABLE[^\(]*\((.*)\)\s*;",
+            body_regex=r"CREATE\s+TABLE[^\(]*\(([\s\S]*?)\)\s*(?:WITH|;)",
             ignore_regex=r"PRIMARY\s+KEY|UNIQUE|CONSTRAINT|CHECK",
             quote_char='"',
             process_colname_func=lambda c: c.strip('"'),
