@@ -980,6 +980,27 @@ class DumpAnalyzer:
         print(_("Found {num_tables} tables with a total of {total_rows} rows.").format(num_tables=len(self.stats), total_rows=f'{total_rows:,d}'))
         print("---------------------------\n")
 
+
+def escape_sql_value(val, prefix_str: str = "") -> str:
+    """
+    Zwraca poprawnie sformatowany fragment SQL dla wartości domyślnej (DEFAULT ...).
+
+    - Dla napisów ('str') escapuje apostrofy i backslashe, np.:
+        "O'Reilly\\Test" → DEFAULT 'O''Reilly\\\\Test'
+    - Dla wartości liczbowych lub None zwraca odpowiedni zapis SQL.
+    """
+    if val is None:
+        return f"{prefix_str} NULL"
+
+    if isinstance(val, str):
+        # Escapowanie znaków specjalnych dla SQL
+        safe_val = val.replace("'", "''").replace("\\", "\\\\")
+        return f"{prefix_str} '{safe_val}'"
+
+    # Dla typów liczbowych, bool itd.
+    return f"{prefix_str} {val}"
+
+
 class DatabaseDiffer:
     def __init__(self, **kwargs):
         self.args = kwargs
@@ -1048,7 +1069,7 @@ class DatabaseDiffer:
                 db_def_parts.append("NOT NULL" if db_col_info['IS_NULLABLE'] == 'NO' else "NULL")
                 if db_col_info['COLUMN_DEFAULT'] is not None:
                     default_val = db_col_info['COLUMN_DEFAULT']
-                    db_def_parts.append(f"DEFAULT '{str(default_val).replace('\'', '\'\'').replace('\\\\', '\\\\\\\\')}'" if isinstance(default_val, str) else f"DEFAULT {default_val}")
+                    db_def_parts.append(escape_sql_value(default_val, "DEFAULT"))
                 elif db_col_info['IS_NULLABLE'] == 'YES':
                      db_def_parts.append("DEFAULT NULL")
                 if db_col_info['EXTRA']:
