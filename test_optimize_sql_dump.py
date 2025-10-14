@@ -14,6 +14,8 @@ import optimize_sql_dump as opt
 # Helper to get the main function for CLI tests
 from optimize_sql_dump import main as cli_main
 
+from optimize_sql_dump import escape_sql_value  # zakładając, że funkcja jest w tym module
+
 
 @pytest.fixture
 def mysql_validator():
@@ -343,3 +345,56 @@ def test_cli_invalid_arguments(tmp_path, invalid_args):
                 cli_main()
     assert e.type == SystemExit
     assert e.value.code != 0 # Ensure it's an error exit code
+
+
+@pytest.mark.parametrize("input_val, expected", [
+    # Testy dla stringów
+    ("tekst", "DEFAULT 'tekst'"),
+    ("O'Reilly", "DEFAULT 'O''Reilly'"),
+    ("C:\\Path\\File", "DEFAULT 'C:\\\\Path\\\\File'"),
+    ("O'Reilly\\Test", "DEFAULT 'O''Reilly\\\\Test'"),
+
+    # Testy dla pustego stringa
+    ("", "DEFAULT ''"),
+
+    # Testy dla wartości liczbowych
+    (0, "DEFAULT 0"),
+    (123, "DEFAULT 123"),
+    (3.14, "DEFAULT 3.14"),
+
+    # Testy dla wartości logicznych
+    (True, "DEFAULT True"),
+    (False, "DEFAULT False"),
+
+    # Test dla None
+    (None, "DEFAULT NULL"),
+])
+def test_escape_sql_value(input_val, expected):
+    assert escape_sql_value(input_val) == expected
+
+
+class TestDatabaseDiffer:
+    @pytest.fixture
+    def differ(self, tmp_path):
+        """Provides a DatabaseDiffer instance for testing."""
+        # The differ's __init__ expects 'inpath' for progress setup.
+        # We provide a dummy path to satisfy this requirement.
+        dummy_inpath = tmp_path / "dummy.sql"
+        dummy_inpath.touch()
+        return opt.DatabaseDiffer(inpath=str(dummy_inpath), verbose=False)
+
+    @pytest.mark.parametrize("input_val, expected_sql", [
+        (None, "NULL"),
+        (123, "123"),
+        (-45, "-45"),
+        (3.14, "3.14"),
+        (0, "0"),
+        ("hello world", "'hello world'"),
+        ("it's a string", "'it''s a string'"),
+        ("", "''"),
+        ("string with \"quotes\"", "'string with \"quotes\"'"),
+        ("O'Reilly", "'O''Reilly'"),
+        ("multiple 'quotes' here", "'multiple ''quotes'' here'"),
+    ])
+    def test_format_sql_value(self, differ, input_val, expected_sql):
+        assert differ._format_sql_value(input_val) == expected_sql
