@@ -1123,7 +1123,8 @@ class DatabaseDiffer:
         def format_value(v):
             if v is None: return "NULL"
             if isinstance(v, (int, float)): return str(v)
-            return f"'{str(v).replace('\'', '\'\'')}'"
+            return escape_sql_value(v)
+
         final_params = [format_value(p) for p in params]
         return update_stmt.replace('%s', '{}').format(*final_params)
 
@@ -1245,7 +1246,8 @@ class DatabaseDiffer:
     def _format_sql_value(self, v):
         if v is None: return "NULL"
         if isinstance(v, (int, float)): return str(v)
-        return f"'{str(v).replace('\'', '\'\'')}'"
+        return escape_sql_value(v)
+
 
 def optimize_dump(**kwargs):
     if kwargs.get('diff_from_db'):
