@@ -279,7 +279,7 @@ def test_cli_load_data_mode(tmp_path):
     assert str(tsv_file) in sql_content
 
     tsv_content = tsv_file.read_text()
-    expected_tsv = f"1\ttest@test.com\tsome notes\n2\t\\n\tother notes with a\ttab\n"
+    expected_tsv = "1\ttest@test.com\tsome notes\n2\t\\N\tother notes with a\\ttab\n"
     assert tsv_content == expected_tsv
 
 
