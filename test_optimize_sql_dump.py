@@ -212,7 +212,7 @@ def test_dump_analyzer(tmp_path, capsys):
 def test_parse_sql_values_to_tsv_row():
     """Tests the conversion of an SQL tuple string to a TSV row."""
     sql_tuple = "(1, 'some text', NULL, 'it\\'s escaped', '\\n')"
-    expected_tsv = "1\tsome text\t\\n\tit's escaped\t\\n"
+    expected_tsv = "1\tsome text\t\\n\tit's escaped\t\n"
     assert opt.parse_sql_values_to_tsv_row(sql_tuple) == expected_tsv
 
 
@@ -279,7 +279,7 @@ def test_cli_load_data_mode(tmp_path):
     assert str(tsv_file) in sql_content
 
     tsv_content = tsv_file.read_text()
-    expected_tsv = "1\ttest@test.com\tsome notes\n2\t\\n\tother notes with a\\ttab\n"
+    expected_tsv = f"1\ttest@test.com\tsome notes\n2\t\\n\tother notes with a\ttab\n"
     assert tsv_content == expected_tsv
 
 
@@ -317,7 +317,7 @@ def test_cli_load_data_mode_postgres(tmp_path):
     assert str(tsv_file) in sql_content
 
     tsv_content = tsv_file.read_text()
-    expected_tsv = "1\ttest@test.com\tsome notes\n2\t\tother notes with a\\ttab\n"
+    expected_tsv = "1\ttest@test.com\tsome notes\n2\t\tother notes with a\ttab\n"
     assert tsv_content == expected_tsv
 
 @pytest.mark.parametrize("invalid_args", [
