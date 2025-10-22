@@ -212,3 +212,4 @@ outdir/
 actions-runner/
 optiomize_sql_dump.ini
 *.csv
+*.sql.gz
