@@ -20,11 +20,11 @@ Ten skrypt (`optimize_sql_dump.py`) przetwarza plik zrzutu i optymalizuje go na 
 
 ## Wymagania
 
-*   Python 3.x
-*   Opcjonalnie biblioteka `tqdm` do wyświetlania paska postępu:
-    ```bash
-    pip install tqdm
-    ```
+* Python 3.x
+* Opcjonalnie biblioteka `tqdm` do wyświetlania paska postępu:
+  ```bash
+  pip install tqdm
+  ```
 
 ## Sposób Użycia
 
@@ -53,8 +53,8 @@ python optimize_sql_dump.py --input big_dump.sql --split ./split_dump/
 ### Przykład 3: Tryb szybkiego ładowania (najszybsza metoda)
 
 Tworzy katalog `fast_load/`, a w nim:
-*   pliki `.tsv` z danymi dla każdej tabeli,
-*   pliki `.sql` z instrukcjami `LOAD DATA` (MySQL) lub `COPY` (PostgreSQL) do wczytania danych z plików `.tsv`.
+* pliki `.tsv` z danymi dla każdej tabeli,
+* pliki `.sql` z instrukcjami `LOAD DATA` (MySQL) lub `COPY` (PostgreSQL) do wczytania danych z plików `.tsv`.
 
 ```bash
 python optimize_sql_dump.py --input big_dump.sql --load-data ./fast_load/

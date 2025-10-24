@@ -12,19 +12,20 @@ This script (`optimize_sql_dump.py`) processes a dump file and optimizes it in s
 
 ## Main Features
 
-*   **Merging `INSERT` Statements**: The script combines many small `INSERT INTO ... VALUES (...), (...), ...` statements into a single, large statement, which drastically reduces the number of queries to the database.
-*   **Fast Load Mode (`--load-data`)**: Generates `.tsv` files (tab-separated values) and a `.sql` file with `LOAD DATA INFILE` (for MySQL) or `COPY` (for PostgreSQL) statements. This is the fastest method for data import.
-*   **Split Mode (`--split`)**: Splits a single large dump file into smaller `.sql` files, one for each table. This makes it easier to manage and import only selected tables.
-*   **Automatic Compression Detection**: The script can automatically read compressed files (`.gz`, `.bz2`, `.xz`, `.zip`), so you don't need to decompress them manually.
-*   **Support for MySQL and PostgreSQL**: Automatically detects the SQL dialect or allows you to specify it manually.
+* **Merging `INSERT` Statements**: The script combines many small `INSERT INTO ... VALUES (...), (...), ...` statements into a single, large statement, which drastically reduces the number of queries to the database.
+* **Fast Load Mode (`--load-data`)**: Generates `.tsv` files (tab-separated values) and a `.sql` file with `LOAD DATA INFILE` (for MySQL) or `COPY` (for PostgreSQL) statements. This is the fastest method for data import.
+* **Split Mode (`--split`)**: Splits a single large dump file into smaller `.sql` files, one for each table. This makes it easier to manage and import only selected tables.
+* **Automatic Compression Detection**: The script can automatically read compressed files (`.gz`, `.bz2`, `.xz`, `.zip`), so you don't need to decompress them manually.
+* **Support for MySQL and PostgreSQL**: Automatically detects the SQL dialect or allows you to specify it manually.
 
 ## Requirements
 
-*   Python 3.x
-*   Optionally, the `tqdm` library for displaying a progress bar:
-    ```bash
-    pip install tqdm
-    ```
+* Python 3.x
+* Optionally, the `tqdm` library for displaying a progress bar:
+
+```bash
+  pip install tqdm
+```
 
 ## Usage
 
@@ -53,8 +54,9 @@ python optimize_sql_dump.py --input big_dump.sql --split ./split_dump/
 ### Example 3: Fast Load Mode (Fastest Method)
 
 Creates the `fast_load/` directory, containing:
-*    `.tsv` files with data for each table,
-*    `.sql` files with `LOAD DATA (MySQL)` or `COPY (PostgreSQL)` statements to load data from the `.tsv` files.
+
+* `.tsv` files with data for each table,
+* `.sql` files with `LOAD DATA (MySQL)` or `COPY (PostgreSQL)` statements to load data from the `.tsv` files.
 
 ```bash
 python optimize_sql_dump.py --input big_dump.sql --load-data ./fast_load/
@@ -78,7 +80,7 @@ python optimize_sql_dump.py --table users --input dump.sql --output users_only.s
 
 ### Example 6: Use the results of the program from the catalog `--load-data ./fast_load/`
 
-```
+```bash
 parallel -j <n> "mysql -h <host> -u <user> < {} " ::: *.sql
 ```
 
