@@ -52,8 +52,8 @@ python optimize_sql_dump.py --input big_dump.sql --split ./split_dump/
 
 ### Example 3: Fast Load Mode (Fastest Method)
 
-Creates the `fast_load/` directory, containing: 
-*    `.tsv` files with data for each table, 
+Creates the `fast_load/` directory, containing:
+*    `.tsv` files with data for each table,
 *    `.sql` files with `LOAD DATA (MySQL)` or `COPY (PostgreSQL)` statements to load data from the `.tsv` files.
 
 ```bash
@@ -95,4 +95,3 @@ parallel -j <n> "mysql -h <host> -u <user> < {} " ::: *.sql
 | --load-data [dir]     |       | Generates .tsv and .sql files for fast import (fastest option).                                  |
 | --verbose             | -v    | Displays additional diagnostic information and a progress bar.                                   |
 | --dry-run             |       | Runs the script without writing any output files.                                                |
-
