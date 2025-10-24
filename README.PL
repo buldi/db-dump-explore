@@ -84,9 +84,9 @@ python optimize_sql_dump.py --table users --input dump.sql --output users_only.s
 | `--output <plik>`     | `-o`  | Plik wyjściowy dla zoptymalizowanego zrzutu.                                                     |
 | `--db-type <typ>`     |       | Typ bazy: `mysql`, `postgres` lub `auto` (domyślnie).                                            |
 | `--table <nazwa>`     | `-t`  | Optymalizuj tylko podaną tabelę.                                                                 |
-| `--batch-size <liczba>`|      | Liczba wierszy w jednej połączonej instrukcji `INSERT` (domyślnie: 1000).                         |
+| `--batch-size <liczba>`|      | Liczba wierszy w jednej połączonej instrukcji `INSERT` (domyślnie: 1000).                        |
 | `--split [katalog]`   |       | Dzieli zrzut na osobne pliki per tabela w podanym katalogu (domyślnie bieżący).                  |
-| `--load-data [katalog]`|      | Generuje pliki `.tsv` i `.sql` do szybkiego importu (najszybsza opcja).                           |
+| `--load-data [katalog]`|      | Generuje pliki `.tsv` i `.sql` do szybkiego importu (najszybsza opcja).                          |
 | `--verbose`           | `-v`  | Wyświetla dodatkowe informacje diagnostyczne i pasek postępu.                                    |
 | `--dry-run`           |       | Uruchamia skrypt bez zapisywania plików wyjściowych.                                             |
 
@@ -111,3 +111,4 @@ parallel -j 8 'psql -h <host> -U <user> -d <nazwa_bazy> -f {}' ::: *.sql
 ```
 
 **Uwaga:** Import równoległy jest najskuteczniejszy, gdy tabele są od siebie niezależne. Jeśli między tabelami istnieją ograniczenia klucza obcego (foreign key), może być konieczne ich wyłączenie przed importem i ponowne włączenie po jego zakończeniu lub importowanie tabel w określonej kolejności.
+https://www.emu-land.net/en/computers/atari_st/tos
