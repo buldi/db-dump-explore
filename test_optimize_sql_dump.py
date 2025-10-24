@@ -1,9 +1,6 @@
 import bz2
 import gzip
-import io
 import lzma
-import os
-import subprocess
 import sys
 import zipfile
 from unittest.mock import patch
@@ -14,7 +11,9 @@ import optimize_sql_dump as opt
 # Helper to get the main function for CLI tests
 from optimize_sql_dump import main as cli_main
 
-from optimize_sql_dump import escape_sql_value  # Assuming the function is in this module
+from optimize_sql_dump import (
+    escape_sql_value,
+)  # Assuming the function is in this module
 
 
 @pytest.fixture
@@ -94,8 +93,10 @@ class TestPostgresTypeValidator:
 
 class TestPostgresHandler:
     def test_normalize_table_name_postgres(self, postgres_handler):
-        assert postgres_handler.normalize_table_name('"public"."my_table"') == "my_table"
-        assert postgres_handler.normalize_table_name('my_table') == "my_table"
+        assert (
+            postgres_handler.normalize_table_name('"public"."my_table"') == "my_table"
+        )
+        assert postgres_handler.normalize_table_name("my_table") == "my_table"
         assert postgres_handler.normalize_table_name('"my_table"') == "my_table"
 
     def test_get_truncate_statement_postgres(self, postgres_handler):
@@ -106,10 +107,10 @@ class TestPostgresHandler:
         cols_str = '("id", "name")'
         tsv_path = "/path/to/my_table.tsv"
         stmt = postgres_handler.get_load_statement("my_table", tsv_path, cols_str)
-        expected_stmt = (
-            "COPY \"my_table\" (\"id\", \"name\") FROM '/path/to/my_table.tsv' WITH (FORMAT csv, DELIMITER E'\\t', NULL '\\n');\n"
+        expected_stmt = "COPY \"my_table\" (\"id\", \"name\") FROM '/path/to/my_table.tsv' WITH (FORMAT csv, DELIMITER E'\\t', NULL '\\n');\n"
+        assert (
+            stmt == expected_stmt
         )
-        assert stmt == expected_stmt
 
     def test_extract_columns_from_create_postgres(self, postgres_handler):
         create_stmt = """
@@ -122,7 +123,10 @@ class TestPostgresHandler:
         """
         columns_str = postgres_handler.extract_columns_from_create(create_stmt)
         # Normalize returned string to a list of column names and compare as a set for robustness
-        cols = [c.strip().strip('"') for c in columns_str.strip().lstrip('(').rstrip(')').split(',')]
+        cols = [  # noqa: E501
+            c.strip().strip('"')
+            for c in columns_str.strip().lstrip("(").rstrip(")").split(",")
+        ]
         assert set(cols) == {"id", "name", "created_at"}
 
     def test_detect_db_type_postgres_specific(self, tmp_path):
@@ -151,27 +155,26 @@ class TestSqlTupleParsers:
         sql = "(1, 'it\\'s a string', 'another (nested) string')"
         fields = list(opt.SqlTupleFieldParser(sql))
         assert len(fields) == 3
-        assert fields == [
-            "1",
-            "'it\\'s a string'",
-            "'another (nested) string'"
-        ]
+        assert fields == ["1", "'it\\'s a string'", "'another (nested) string'"]
 
 
-@pytest.mark.parametrize("compressor, extension", [
-    (gzip.open, ".gz"),
-    (bz2.open, ".bz2"),
-    (lzma.open, ".xz"),
-    (None, ".zip"), # Special case for zip
-    (None, ".sql"), # No compression
-])
+@pytest.mark.parametrize(
+    "compressor, extension",
+    [
+        (gzip.open, ".gz"),
+        (bz2.open, ".bz2"),
+        (lzma.open, ".xz"),
+        (None, ".zip"),  # Special case for zip
+        (None, ".sql"),  # No compression
+    ],
+)
 def test_open_maybe_compressed(tmp_path, compressor, extension):
     """Tests detection and reading of various compression formats."""
     content = "CREATE TABLE t1 (id INT);"
     p = tmp_path / f"dump{extension}"
 
     if extension == ".zip":
-        with zipfile.ZipFile(p, 'w') as zf:
+        with zipfile.ZipFile(p, "w") as zf:
             zf.writestr("dump.sql", content)
     elif extension != ".sql":
         with compressor(p, "wt") as f:
@@ -198,16 +201,18 @@ def test_dump_analyzer(tmp_path, capsys):
 
     # Simulate running from command line with --info
     test_args = ["optimize_sql_dump.py", "--input", str(dump_file), "--info"]
-    with patch.object(sys, 'argv', test_args):
-        with patch('optimize_sql_dump._load_config', return_value={}): # Mock _load_config
+    with patch.object(sys, "argv", test_args):
+        with patch(
+            "optimize_sql_dump._load_config", return_value={}
+        ):  # Mock _load_config
             opt.main()
 
     captured = capsys.readouterr()
     assert "--- Dump Analysis Summary ---" in captured.out
     assert "t1" in captured.out
-    assert "3" in captured.out # 3 rows in t1
+    assert "3" in captured.out  # 3 rows in t1
     assert "t2" in captured.out
-    assert "1" in captured.out # 1 row in t2
+    assert "1" in captured.out  # 1 row in t2
     assert "Found 2 tables with a total of 4 rows." in captured.out
 
 
@@ -229,9 +234,17 @@ INSERT INTO `t2` VALUES ('a'),('b');"""
     split_dir = tmp_path / "split_output"
 
     # Simulate running from command line
-    test_args = ["optimize_sql_dump.py", "-i", str(dump_file), "--split", str(split_dir)]
-    with patch.object(sys, 'argv', test_args):
-        with patch('optimize_sql_dump._load_config', return_value={}): # Mock _load_config
+    test_args = [
+        "optimize_sql_dump.py",
+        "-i",
+        str(dump_file),
+        "--split",
+        str(split_dir),
+    ]
+    with patch.object(sys, "argv", test_args):
+        with patch(
+            "optimize_sql_dump._load_config", return_value={}
+        ):  # Mock _load_config
             cli_main()
 
     assert (split_dir / "t1.sql").exists()
@@ -264,9 +277,17 @@ def test_cli_load_data_mode(tmp_path):
     load_data_dir = tmp_path / "load_data_output"
 
     # Simulate running from command line
-    test_args = ["optimize_sql_dump.py", "-i", str(dump_file), "--load-data", str(load_data_dir)]
-    with patch.object(sys, 'argv', test_args):
-        with patch('optimize_sql_dump._load_config', return_value={}): # Mock _load_config
+    test_args = [
+        "optimize_sql_dump.py",
+        "-i",
+        str(dump_file),
+        "--load-data",
+        str(load_data_dir),
+    ]
+    with patch.object(sys, "argv", test_args):
+        with patch(
+            "optimize_sql_dump._load_config", return_value={}
+        ):  # Mock _load_config
             cli_main()
 
     sql_file = load_data_dir / "users.sql"
@@ -280,21 +301,24 @@ def test_cli_load_data_mode(tmp_path):
     assert "LOAD DATA LOCAL INFILE" in sql_content
     assert str(tsv_file) in sql_content
 
-    tsv_content = tsv_file.read_text()
-    expected_tsv = "1\ttest@test.com\tsome notes\n2\t\\n\tother notes with a\ttab\n"
+    tsv_content = tsv_file.read_text()  # noqa: E501
+    expected_tsv = "1\ttest@test.com\tsome notes\n2\t\\n\tother notes with a\ttab\n"  # noqa: E501
     assert tsv_content == expected_tsv
 
 
-@pytest.mark.parametrize("invalid_args", [
-    # Mutually exclusive modes
-    ["--output", "out.sql", "--split", "dir"],
-    ["--output", "out.sql", "--load-data", "dir"],
-    ["--split", "dir", "--load-data", "dir"],
-    ["--info", "--output", "out.sql"],
-    # Missing required args
-    ["--diff-from-db"], # requires --output
-    ["--diff-from-db", "--output", "out.sql"], # requires db-user/db-name
-])
+@pytest.mark.parametrize(
+    "invalid_args",
+    [  # noqa: E501
+        # Mutually exclusive modes
+        ["--output", "out.sql", "--split", "dir"],
+        ["--output", "out.sql", "--load-data", "dir"],
+        ["--split", "dir", "--load-data", "dir"],
+        ["--info", "--output", "out.sql"],
+        # Missing required args
+        ["--diff-from-db"],  # requires --output
+        ["--diff-from-db", "--output", "out.sql"],  # requires db-user/db-name
+    ],
+)
 def test_cli_invalid_arguments(tmp_path, invalid_args):
     """Tests that the CLI exits with an error for invalid argument combinations."""
     dump_file = tmp_path / "in.sql"
@@ -302,35 +326,34 @@ def test_cli_invalid_arguments(tmp_path, invalid_args):
     base_args = ["optimize_sql_dump.py", "-i", str(dump_file)]
 
     with pytest.raises(SystemExit) as e:
-        with patch.object(sys, 'argv', base_args + invalid_args):
-            with patch('optimize_sql_dump._load_config', return_value={}): # Mock _load_config
+        with patch.object(sys, "argv", base_args + invalid_args):
+            with patch(
+                "optimize_sql_dump._load_config", return_value={}
+            ):  # Mock _load_config
                 cli_main()
-    assert e.type == SystemExit
-    assert e.value.code != 0 # Ensure it's an error exit code
+    assert e.type is SystemExit
+    assert e.value.code != 0  # Ensure it's an error exit code
 
 
-@pytest.mark.parametrize("input_val, expected", [
-    # Tests for strings
-    ("tekst", "DEFAULT 'tekst'"),
-    ("O'Reilly", "DEFAULT 'O''Reilly'"),
-    ("C:\\Path\\File", "DEFAULT 'C:\\\\Path\\\\File'"),
-    ("O'Reilly\\Test", "DEFAULT 'O''Reilly\\\\Test'"),
-
-    # Test for empty string
-    ("", "DEFAULT ''"),
-
-    # Tests for numeric values
-    (0, "DEFAULT 0"),
-    (123, "DEFAULT 123"),
-    (3.14, "DEFAULT 3.14"),
-
-    # Tests for boolean values
-    (True, "DEFAULT True"),
-    (False, "DEFAULT False"),
-
-    # Test for None
-    (None, "DEFAULT NULL"),
-])
+@pytest.mark.parametrize(
+    "input_val, expected", [
+        # Tests for strings
+        ("tekst", "DEFAULT 'tekst'"),
+        ("O'Reilly", "DEFAULT 'O''Reilly'"),
+        ("C:\\Path\\File", "DEFAULT 'C:\\\\Path\\\\File'"),
+        ("O'Reilly\\Test", "DEFAULT 'O''Reilly\\\\Test'"),
+        # Test for empty string
+        ("", "DEFAULT ''"),
+        # Tests for numeric values
+        (0, "DEFAULT 0"),
+        (123, "DEFAULT 123"),
+        (3.14, "DEFAULT 3.14"),
+        # Tests for boolean values
+        (True, "DEFAULT True"),
+        (False, "DEFAULT False"),
+        # Test for None
+        (None, "DEFAULT NULL"),
+    ])
 def test_escape_sql_value(input_val, expected):
     assert escape_sql_value(input_val, prefix_str="DEFAULT").strip() == expected
 
@@ -345,18 +368,19 @@ class TestDatabaseDiffer:
         dummy_inpath.touch()
         return opt.DatabaseDiffer(inpath=str(dummy_inpath), verbose=False)
 
-    @pytest.mark.parametrize("input_val, expected_sql", [
-        (None, "NULL"),
-        (123, "123"),
-        (-45, "-45"),
-        (3.14, "3.14"),
-        (0, "0"),
-        ("hello world", "'hello world'"),
-        ("it's a string", "'it''s a string'"),
-        ("", "''"),
-        ("string with \"quotes\"", "'string with \"quotes\"'"),
-        ("O'Reilly", "'O''Reilly'"),
-        ("multiple 'quotes' here", "'multiple ''quotes'' here'"),
-    ])
+    @pytest.mark.parametrize(
+        "input_val, expected_sql", [
+            (None, "NULL"),
+            (123, "123"),
+            (-45, "-45"),
+            (3.14, "3.14"),
+            (0, "0"),
+            ("hello world", "'hello world'"),
+            ("it's a string", "'it''s a string'"),
+            ("", "''"),
+            ('string with "quotes"', "'string with \"quotes\"'"),
+            ("O'Reilly", "'O''Reilly'"),
+            ("multiple 'quotes' here", "'multiple ''quotes'' here'"),
+        ])
     def test_format_sql_value(self, differ, input_val, expected_sql):
         assert differ._format_sql_value(input_val) == expected_sql

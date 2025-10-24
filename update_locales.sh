@@ -1,89 +1,89 @@
 #!/bin/bash
 
-# Ten skrypt automatyzuje proces aktualizacji plików lokalizacyjnych.
+# This script automates the process of updating localization files.
 #
-# Użycie:
-#   ./update_locales.sh        - Aktualizuje wszystkie istniejące tłumaczenia.
-#   ./update_locales.sh <kod>  - Tworzy nowe tłumaczenie dla danego kodu języka (np. 'de', 'fr').
+# Usage:
+#   ./update_locales.sh        - Updates all existing translations.
+#   ./update_locales.sh <code>  - Creates a new translation for the given language code (e.g., 'de', 'fr').
 
-# --- Konfiguracja ---
-set -e # Przerwij działanie skryptu w przypadku błędu
+# --- Configuration ---
+set -e # Exit immediately if a command exits with a non-zero status.
 
 APP_NAME="optimize_sql_dump"
 SOURCE_FILE="optimize_sql_dump.py"
 LOCALE_DIR="locale"
 POT_FILE="${LOCALE_DIR}/${APP_NAME}.pot"
 
-# --- Funkcje ---
+# --- Functions ---
 
 update_pot_file() {
-    echo "1. Aktualizowanie pliku szablonu '${POT_FILE}' z '${SOURCE_FILE}'..."
-    # Używamy opcji, aby upewnić się, że plik .pot jest generowany z nagłówkiem UTF-8
-    xgettext --keyword=_ --from-code=UTF-8 -d "${APP_NAME}" -o "${POT_FILE}" \
-        --add-comments="TRANSLATORS:" -L Python \
-        --package-name="${APP_NAME}" --msgid-bugs-address="dobrakowskirafal@gmail.com" "${SOURCE_FILE}"
+	echo "1. Updating template file '${POT_FILE}' from '${SOURCE_FILE}'..."
+	# Use options to ensure the .pot file is generated with a UTF-8 header
+	xgettext --keyword=_ --from-code=UTF-8 -d "${APP_NAME}" -o "${POT_FILE}" \
+		--add-comments="TRANSLATORS:" -L Python \
+		--package-name="${APP_NAME}" --msgid-bugs-address="dobrakowskirafal@gmail.com" "${SOURCE_FILE}"
 
-    # Wymuś kodowanie UTF-8 w nagłówku pliku .pot, aby uniknąć błędów
-    sed -i 's/charset=CHARSET/charset=UTF-8/' "${POT_FILE}"
-    echo "   ...Gotowe."
-    echo ""
+	# Force UTF-8 encoding in the .pot file header to avoid errors
+	sed -i 's/charset=CHARSET/charset=UTF-8/' "${POT_FILE}"
+	echo "   ...Done."
+	echo ""
 }
 
 update_and_compile_po_files() {
-    echo "--- Rozpoczynanie aktualizacji istniejących lokalizacji ---"
-    update_pot_file
+	echo "--- Starting update of existing localizations ---"
+	update_pot_file
 
-    echo "2. Wyszukiwanie plików .po do aktualizacji i kompilacji..."
+	echo "2. Searching for .po files to update and compile..."
 
-    if ! find "${LOCALE_DIR}" -name "*.po" -print -quit | grep -q .; then
-        echo "   Nie znaleziono żadnych plików .po. Użyj skryptu z kodem języka, aby utworzyć nowy, np. './update_locales.sh pl'."
-        echo "--- Aktualizacja lokalizacji zakończona (bez zmian) ---"
-        return
-    fi
+	if ! find "${LOCALE_DIR}" -name "*.po" -print -quit | grep -q .; then
+		echo "   No .po files found. Use the script with a language code to create a new one, e.g., './update_locales.sh en'."
+		echo "--- Localization update finished (no changes) ---"
+		return
+	fi
 
-    for po_file in $(find "${LOCALE_DIR}" -name "*.po"); do
-        echo "   -> Znaleziono plik: ${po_file}"
-        echo "      - Scalanie nowych tekstów..."
-        msgmerge --update "${po_file}" "${POT_FILE}"
+	for po_file in $(find "${LOCALE_DIR}" -name "*.po"); do
+		echo "   -> Found file: ${po_file}"
+		echo "      - Merging new strings..."
+		msgmerge --update "${po_file}" "${POT_FILE}"
 
-        mo_file="${po_file%.po}.mo"
-        echo "      - Kompilowanie do pliku ${mo_file}..."
-        msgfmt -o "${mo_file}" "${po_file}"
-        echo "      ...Gotowe."
-    done
-    echo ""
-    echo "--- Aktualizacja lokalizacji zakończona pomyślnie ---"
+		mo_file="${po_file%.po}.mo"
+		echo "      - Compiling to ${mo_file}..."
+		msgfmt -o "${mo_file}" "${po_file}"
+		echo "      ...Done."
+	done
+	echo ""
+	echo "--- Localization update completed successfully ---"
 }
 
 create_new_language() {
-    LANG_CODE=$1
-    echo "--- Próba utworzenia nowego tłumaczenia dla języka: ${LANG_CODE} ---"
+	LANG_CODE=$1
+	echo "--- Attempting to create a new translation for language: ${LANG_CODE} ---"
 
-    PO_FILE="${LOCALE_DIR}/${LANG_CODE}/LC_MESSAGES/${APP_NAME}.po"
+	PO_FILE="${LOCALE_DIR}/${LANG_CODE}/LC_MESSAGES/${APP_NAME}.po"
 
-    if [ -f "${PO_FILE}" ]; then
-        echo "Błąd: Plik tłumaczenia '${PO_FILE}' już istnieje."
-        echo "Aby go zaktualizować, uruchom skrypt bez argumentów."
-        exit 1
-    fi
+	if [ -f "${PO_FILE}" ]; then
+		echo "Error: Translation file '${PO_FILE}' already exists."
+		echo "To update it, run the script without arguments."
+		exit 1
+	fi
 
-    update_pot_file
+	update_pot_file
 
-    echo "2. Tworzenie nowego pliku .po dla języka '${LANG_CODE}'..."
-    # Upewnij się, że katalog docelowy istnieje
-    mkdir -p "$(dirname "${PO_FILE}")"
+	echo "2. Creating new .po file for language '${LANG_CODE}'..."
+	# Ensure the target directory exists
+	mkdir -p "$(dirname "${PO_FILE}")"
 
-    msginit --input="${POT_FILE}" --output-file="${PO_FILE}" --locale="${LANG_CODE}"
-    echo "   ...Gotowe."
-    echo ""
-    echo "Utworzono nowy plik tłumaczenia: ${PO_FILE}"
-    echo "Teraz możesz go edytować i uzupełnić tłumaczenia."
-    echo "--- Tworzenie nowego tłumaczenia zakończone pomyślnie ---"
+	msginit --input="${POT_FILE}" --output-file="${PO_FILE}" --locale="${LANG_CODE}"
+	echo "   ...Done."
+	echo ""
+	echo "New translation file created: ${PO_FILE}"
+	echo "You can now edit it and fill in the translations."
+	echo "--- New translation creation completed successfully ---"
 }
 
-# --- Główna logika skryptu ---
+# --- Main script logic ---
 if [ -n "$1" ]; then
-    create_new_language "$1"
+	create_new_language "$1"
 else
-    update_and_compile_po_files
+	update_and_compile_po_files
 fi

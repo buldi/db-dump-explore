@@ -6,7 +6,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: dobrakowskirafal@gmail.com\n"
-"POT-Creation-Date: 2025-10-14 20:06+0200\n"
+"POT-Creation-Date: 2025-10-24 18:31+0200\n"
 "PO-Revision-Date: 2024-05-21 12:00+0200\n"
 "Last-Translator: Rafał Dobrakowski <dobrakowskirafal@gmail.com>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -16,201 +16,201 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Generated-By: pygettext.py 1.5\n"
 
-#: optimize_sql_dump.py:87
+#: optimize_sql_dump.py:91
 msgid "Empty zip file"
 msgstr "Pusty plik zip"
 
-#: optimize_sql_dump.py:90
+#: optimize_sql_dump.py:95
 #, python-brace-format
 msgid "ZIP archive contains multiple files, using only the first one: {name}"
 msgstr ""
 "Archiwum ZIP zawiera wiele plików, użyty zostanie tylko pierwszy z nich: "
 "{name}"
 
-#: optimize_sql_dump.py:628 optimize_sql_dump.py:725 optimize_sql_dump.py:940
+#: optimize_sql_dump.py:668 optimize_sql_dump.py:973
 #, python-brace-format
 msgid "[INFO] Detected DB type: {db_type}"
 msgstr "[INFO] Wykryto typ bazy danych: {db_type}"
 
-#: optimize_sql_dump.py:635 optimize_sql_dump.py:732
+#: optimize_sql_dump.py:676
 msgid "Processing"
 msgstr "Przetwarzanie"
 
-#: optimize_sql_dump.py:652 optimize_sql_dump.py:749
+#: optimize_sql_dump.py:696
 #, python-brace-format
 msgid "[INFO] Created files for table {tname}: {sql_fname}, {tsv_fname}"
 msgstr "[INFO] Utworzono pliki dla tabeli {tname}: {sql_fname}, {tsv_fname}"
 
-#: optimize_sql_dump.py:660 optimize_sql_dump.py:757
+#: optimize_sql_dump.py:706
 #, python-brace-format
 msgid "[INFO] Created file {fname}"
 msgstr "[INFO] Utworzono plik {fname}"
 
-#: optimize_sql_dump.py:818
+#: optimize_sql_dump.py:792
 #, python-brace-format
 msgid "Processing table: {tname}"
 msgstr ""
 
-#: optimize_sql_dump.py:831 optimize_sql_dump.py:843
+#: optimize_sql_dump.py:810 optimize_sql_dump.py:838
 #, python-brace-format
 msgid "[WARN] Failed to parse VALUES in INSERT for table {tname}: {error}"
 msgstr ""
 
-#: optimize_sql_dump.py:880
+#: optimize_sql_dump.py:884
 msgid "-- Optimized by SqlDumpOptimizer\n"
 msgstr "-- Zoptymalizowano przez SqlDumpOptimizer\n"
 
-#: optimize_sql_dump.py:881
+#: optimize_sql_dump.py:886
 #, python-brace-format
 msgid "-- Source: {source}\n"
 msgstr "-- Źródło: {source}\n"
 
-#: optimize_sql_dump.py:915
+#: optimize_sql_dump.py:929
 #, python-brace-format
 msgid "[INFO] Wrote {rows} records in {batches} batches."
 msgstr "[INFO] Zapisano {rows} rekordów w {batches} wsadach."
 
-#: optimize_sql_dump.py:917
+#: optimize_sql_dump.py:938
 #, python-brace-format
 msgid "Done. Saved to: {path}"
 msgstr "Gotowe. Zapisano do: {path}"
 
-#: optimize_sql_dump.py:919
+#: optimize_sql_dump.py:941
 #, python-brace-format
 msgid "Done. Split dump into files in directory: {path}"
 msgstr "Gotowe. Podzielono zrzut na pliki w katalogu: {path}"
 
-#: optimize_sql_dump.py:921
+#: optimize_sql_dump.py:947
 #, python-brace-format
 msgid "Done. Generated files for import in directory: {path}"
 msgstr "Gotowe. Wygenerowano pliki do importu w katalogu: {path}"
 
-#: optimize_sql_dump.py:923
+#: optimize_sql_dump.py:953
 #, python-brace-format
 msgid "Done. Generated insert-only files in directory: {path}"
 msgstr "Gotowe. Wygenerowano pliki tylko z danymi w katalogu: {path}"
 
-#: optimize_sql_dump.py:947
+#: optimize_sql_dump.py:981
 msgid "Analyzing dump"
 msgstr ""
 
-#: optimize_sql_dump.py:972
+#: optimize_sql_dump.py:1014
 msgid "--- Dump Analysis Summary ---"
 msgstr ""
 
-#: optimize_sql_dump.py:980
+#: optimize_sql_dump.py:1023
 #, python-brace-format
 msgid "Found {num_tables} tables with a total of {total_rows} rows."
 msgstr ""
 
-#: optimize_sql_dump.py:1002
+#: optimize_sql_dump.py:1076
 msgid "Parsing dump for diff"
 msgstr "Parsowanie zrzutu w celu porównania"
 
-#: optimize_sql_dump.py:1017
+#: optimize_sql_dump.py:1094
 #, python-brace-format
 msgid "[INFO] Successfully connected to database '{db}' on {host}"
 msgstr "[INFO] Pomyślnie połączono z bazą danych '{db}' na hoście {host}"
 
-#: optimize_sql_dump.py:1019
+#: optimize_sql_dump.py:1098
 #, python-brace-format
 msgid "[ERROR] Database connection failed: {error}"
 msgstr "[BŁĄD] Połączenie z bazą danych nie powiodło się: {error}"
 
-#: optimize_sql_dump.py:1073
+#: optimize_sql_dump.py:1165
 #, python-brace-format
 msgid "[INFO] Fetched {count} primary keys for table `{tname}`."
 msgstr "[INFO] Pobrano {count} kluczy głównych dla tabeli `{tname}`."
 
-#: optimize_sql_dump.py:1127
+#: optimize_sql_dump.py:1249
 #, python-brace-format
 msgid "Diffing schema for {tname}"
 msgstr ""
 
-#: optimize_sql_dump.py:1154
+#: optimize_sql_dump.py:1286
 #, python-brace-format
 msgid "[WARN] Skipping data diff for table `{tname}`: no primary key found."
 msgstr ""
 "[OSTRZEŻENIE] Pomijanie porównywania danych dla tabeli `{tname}`: nie "
 "znaleziono klucza głównego."
 
-#: optimize_sql_dump.py:1159
+#: optimize_sql_dump.py:1294
 #, python-brace-format
 msgid "Diffing data for {tname}"
 msgstr ""
 
-#: optimize_sql_dump.py:1180
+#: optimize_sql_dump.py:1327
 msgid "Generating DELETE statements"
 msgstr ""
 
-#: optimize_sql_dump.py:1199
+#: optimize_sql_dump.py:1355
 #, python-brace-format
 msgid "Done. Diff saved to: {path}"
 msgstr "Gotowe. Różnice zapisano do: {path}"
 
-#: optimize_sql_dump.py:1200
+#: optimize_sql_dump.py:1356
 msgid "--- Diff Summary ---"
 msgstr ""
 
-#: optimize_sql_dump.py:1202
+#: optimize_sql_dump.py:1359
 #, python-brace-format
 msgid "Tables to create: {count}"
 msgstr ""
 
-#: optimize_sql_dump.py:1203
+#: optimize_sql_dump.py:1364
 #, python-brace-format
 msgid "Tables to alter: {count}"
 msgstr ""
 
-#: optimize_sql_dump.py:1205
+#: optimize_sql_dump.py:1370
 #, python-brace-format
 msgid "Rows to insert: {count}"
 msgstr ""
 
-#: optimize_sql_dump.py:1207
+#: optimize_sql_dump.py:1374
 #, python-brace-format
 msgid "Rows to update: {count}"
 msgstr ""
 
-#: optimize_sql_dump.py:1208
+#: optimize_sql_dump.py:1379
 #, python-brace-format
 msgid "Rows to delete: {count}"
 msgstr ""
 
-#: optimize_sql_dump.py:1284
+#: optimize_sql_dump.py:1480
 msgid "Optional form: <input_file> <output_file>"
 msgstr "Opcjonalna forma: <plik_wejściowy> <plik_wyjściowy>"
 
-#: optimize_sql_dump.py:1286
+#: optimize_sql_dump.py:1482
 msgid "Dump file (can be .gz/.bz2/.xz/.zip)"
 msgstr "Plik zrzutu (może być .gz/.bz2/.xz/.zip)"
 
-#: optimize_sql_dump.py:1287
+#: optimize_sql_dump.py:1483
 msgid "Output file (optimized)"
 msgstr "Plik wyjściowy (zoptymalizowany)"
 
-#: optimize_sql_dump.py:1291
+#: optimize_sql_dump.py:1487
 msgid "Database dialect: mysql/postgres or auto (default)"
 msgstr "Dialekt bazy danych: mysql/postgres lub auto (domyślnie)"
 
-#: optimize_sql_dump.py:1297
+#: optimize_sql_dump.py:1493
 msgid "If specified, optimize only this table (name without schema)"
 msgstr "Jeśli podano, optymalizuj tylko tę tabelę (nazwa bez schematu)"
 
-#: optimize_sql_dump.py:1302
+#: optimize_sql_dump.py:1498
 msgid "Number of tuples in a single merged INSERT (default: 1000)"
 msgstr ""
 "Liczba krotek w pojedynczym, połączonym poleceniu INSERT (domyślnie: 1000)"
 
-#: optimize_sql_dump.py:1308
+#: optimize_sql_dump.py:1501
 msgid "Print diagnostic information"
 msgstr "Wyświetl informacje diagnostyczne"
 
-#: optimize_sql_dump.py:1313
+#: optimize_sql_dump.py:1506
 msgid "Dry run mode: does not write the output file"
 msgstr "Tryb 'na sucho': nie zapisuje pliku wyjściowego"
 
-#: optimize_sql_dump.py:1319
+#: optimize_sql_dump.py:1513
 msgid ""
 "Split the dump into separate files per table. If a directory is provided, "
 "files will be saved there. If no value is given, use the current directory."
@@ -219,7 +219,7 @@ msgstr ""
 "zostaną tam zapisane. Jeśli nie podano wartości, użyty zostanie bieżący "
 "katalog."
 
-#: optimize_sql_dump.py:1328
+#: optimize_sql_dump.py:1524
 msgid ""
 "[MySQL ONLY] Generate .sql and .tsv files for LOAD DATA INFILE. Requires a "
 "directory (defaults to current). Mutually exclusive with --output and --"
@@ -229,7 +229,7 @@ msgstr ""
 "podania katalogu (domyślnie bieżący). Wzajemnie wyklucza się z --output i --"
 "split."
 
-#: optimize_sql_dump.py:1334
+#: optimize_sql_dump.py:1532
 msgid ""
 "[--load-data ONLY] Number of rows buffered before writing to the .tsv file "
 "(default: 200)"
@@ -237,7 +237,7 @@ msgstr ""
 "[TYLKO --load-data] Liczba wierszy buforowanych przed zapisem do pliku .tsv "
 "(domyślnie: 200)"
 
-#: optimize_sql_dump.py:1340
+#: optimize_sql_dump.py:1540
 msgid ""
 "Generate insert-only files per table, each containing TRUNCATE and INSERTs. "
 "If a directory is provided, files will be saved there. If no value is given, "
@@ -248,23 +248,23 @@ msgstr ""
 "wartości, użyty zostanie bieżący katalog. Wzajemnie wyklucza się z innymi "
 "trybami wyjścia."
 
-#: optimize_sql_dump.py:1348
+#: optimize_sql_dump.py:1550
 msgid ""
 "Analyze the dump file and print a summary of its contents (tables, rows) "
 "without writing any files."
 msgstr ""
 
-#: optimize_sql_dump.py:1350
+#: optimize_sql_dump.py:1553
 msgid "Database Diffing (Experimental)"
 msgstr "Porównywanie baz danych (eksperymentalne)"
 
-#: optimize_sql_dump.py:1353
+#: optimize_sql_dump.py:1558
 msgid "Generate a diff SQL file by comparing the dump against a live database."
 msgstr ""
 "Generuje plik SQL z różnicami poprzez porównanie zrzutu z działającą bazą "
 "danych."
 
-#: optimize_sql_dump.py:1357
+#: optimize_sql_dump.py:1565
 msgid ""
 "Also compare table data and generate INSERT/UPDATE/DELETE statements "
 "(requires --diff-from-db)."
@@ -272,41 +272,41 @@ msgstr ""
 "Porównuje również dane w tabelach i generuje instrukcje INSERT/UPDATE/DELETE "
 "(wymaga --diff-from-db)."
 
-#: optimize_sql_dump.py:1359
+#: optimize_sql_dump.py:1568
 msgid "Database host for diffing."
 msgstr "Host bazy danych do porównania."
 
-#: optimize_sql_dump.py:1360
+#: optimize_sql_dump.py:1569
 msgid "Database user for diffing."
 msgstr "Użytkownik bazy danych do porównania."
 
-#: optimize_sql_dump.py:1361
+#: optimize_sql_dump.py:1570
 msgid "Database password for diffing."
 msgstr "Hasło bazy danych do porównania."
 
-#: optimize_sql_dump.py:1362
+#: optimize_sql_dump.py:1571
 msgid "Database name for diffing."
 msgstr "Nazwa bazy danych do porównania."
 
-#: optimize_sql_dump.py:1372
+#: optimize_sql_dump.py:1589
 msgid ""
 "You must provide an input dump (--input or the first positional argument)"
 msgstr ""
 "Musisz podać wejściowy plik zrzutu (--input lub jako pierwszy argument "
 "pozycyjny)"
 
-#: optimize_sql_dump.py:1374
+#: optimize_sql_dump.py:1593
 #, python-brace-format
 msgid "File not found: {path}"
 msgstr "Nie znaleziono pliku: {path}"
 
-#: optimize_sql_dump.py:1378
+#: optimize_sql_dump.py:1599
 #, python-brace-format
 msgid ""
 "[INFO] Output filename does not end with .sql, appending it. New name: {name}"
 msgstr ""
 
-#: optimize_sql_dump.py:1392
+#: optimize_sql_dump.py:1619
 #, fuzzy
 msgid ""
 "--insert-only can be used either standalone or with --diff-from-db/--info, "
@@ -315,13 +315,13 @@ msgstr ""
 "Opcja --insert-only może być używana samodzielnie lub z --diff-from-db, ale "
 "nie z innymi trybami wyjścia."
 
-#: optimize_sql_dump.py:1394
+#: optimize_sql_dump.py:1625
 msgid ""
 "You must specify an output mode like --output, --split, --diff-from-db, etc."
 msgstr ""
 "Musisz określić tryb wyjścia, np. --output, --split, --diff-from-db, etc."
 
-#: optimize_sql_dump.py:1396
+#: optimize_sql_dump.py:1631
 #, fuzzy
 msgid ""
 "Primary output modes (--output, --split, --load-data, --diff-from-db, --"
@@ -330,7 +330,7 @@ msgstr ""
 "Główne tryby wyjścia (--output, --split, --load-data, --diff-from-db) "
 "wzajemnie się wykluczają."
 
-#: optimize_sql_dump.py:1399
+#: optimize_sql_dump.py:1638
 msgid ""
 "The 'mysql-connector-python' library is required for --diff-from-db. Please "
 "install it using: pip install mysql-connector-python"
@@ -338,23 +338,23 @@ msgstr ""
 "Biblioteka 'mysql-connector-python' jest wymagana dla --diff-from-db. "
 "Zainstaluj ją za pomocą: pip install mysql-connector-python"
 
-#: optimize_sql_dump.py:1401
+#: optimize_sql_dump.py:1642
 msgid "--diff-from-db requires --output to be specified."
 msgstr "Opcja --diff-from-db wymaga podania pliku wyjściowego --output."
 
-#: optimize_sql_dump.py:1403
+#: optimize_sql_dump.py:1644
 msgid "--diff-from-db requires --db-user and --db-name."
 msgstr "Opcja --diff-from-db wymaga podania --db-user oraz --db-name."
 
-#: optimize_sql_dump.py:1405
+#: optimize_sql_dump.py:1646
 msgid "--diff-from-db currently only supports MySQL."
 msgstr "Opcja --diff-from-db obecnie wspiera tylko MySQL."
 
-#: optimize_sql_dump.py:1407
+#: optimize_sql_dump.py:1648
 msgid "--diff-data can only be used with --diff-from-db."
 msgstr "Opcja --diff-data może być używana tylko z --diff-from-db."
 
-#: optimize_sql_dump.py:1413
+#: optimize_sql_dump.py:1655
 msgid ""
 "SQL Dump Optimizer: merges INSERTs, detects compression, supports MySQL/"
 "Postgres."
