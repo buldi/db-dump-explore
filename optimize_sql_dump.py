@@ -1384,7 +1384,7 @@ class DatabaseDiffer:
 
     def _parse_single_tuple_to_fields(self, tuple_str: str) -> list[str | None]:
         parser = SqlTupleFieldParser(tuple_str)
-        fields = []
+        fields: list[str | None] = []
         for field_str in parser:
             stripped_field = field_str.strip()
             if stripped_field.upper() == "NULL":
