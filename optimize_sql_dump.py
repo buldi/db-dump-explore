@@ -42,6 +42,10 @@ except (locale.Error, IndexError):
     pass  # Keep default locale if setting fails
 import gettext
 
+#-----------------------------------------
+global _
+#-----------------------------------------
+
 # ---------- Localization setup ----------
 APP_NAME = "optimize_sql_dump"
 LOCALE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "locale")
@@ -1506,13 +1510,15 @@ class DatabaseDiffer:
         parser = SqlTupleFieldParser(tuple_str)
         fields = []
         for field_str in parser:
-            field_str = field_str.strip()
-            if field_str.upper() == "NULL":
+            stripped_field = field_str.strip()
+            if stripped_field.upper() == "NULL":
                 fields.append(None)
-            elif field_str.startswith("'") and field_str.endswith("'"):
-                fields.append(field_str[1:-1].replace("''", "'").replace('\\"', '"'))
+            elif stripped_field.startswith("'") and stripped_field.endswith("'"):
+                # Handles '' as empty string, and 'it''s' as "it's"
+                fields.append(stripped_field[1:-1].replace("''", "'").replace('\\"', '"'))
             else:
-                fields.append(field_str)
+                # For numbers or other unquoted values
+                fields.append(stripped_field)
         return fields
 
     def _format_sql_value(self, v):
@@ -1520,7 +1526,10 @@ class DatabaseDiffer:
             return "NULL"
         if isinstance(v, (int, float)):
             return str(v)
-        return escape_sql_value(v)
+        # For strings, use a simplified escape that just wraps in quotes and escapes single quotes
+        # This is for generating INSERT/UPDATE values, not DEFAULT clauses.
+        safe_val = str(v).replace("'", "''")
+        return f"'{safe_val}'"
 
 
 def optimize_dump(**kwargs):
@@ -1763,7 +1772,7 @@ def _validate_args(p, args):
 
 
 def set_parse_arguments_and_config():
-    global _
+
     parser = argparse.ArgumentParser(
         description=_(
             "SQL Dump Optimizer: merges INSERTs, detects compression, supports MySQL/Postgres."
@@ -1785,7 +1794,7 @@ def set_parse_arguments_and_config():
 
 
 def main():
-    global _
+
     # setup_app_locale()  # removed
     args = set_parse_arguments_and_config()
     kwargs = vars(args)
