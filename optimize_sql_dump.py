@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
 """
 SQL Dump Optimizer (MySQL / Postgres)
 - Detects compression by magic number (gzip, bzip2, xz, zip, none).
@@ -13,17 +16,17 @@ It works well on typical dumps from mysqldump/pg_dump but may have issues with n
 """
 
 import argparse
-import io
-import os
-import sys
-import gzip
 import bz2
-import lzma
-import zipfile
-import locale
-import re
-import warnings
 import configparser
+import gzip
+import io
+import locale
+import lzma
+import os
+import re
+import sys
+import warnings
+import zipfile
 from abc import ABC, abstractmethod
 
 try:
@@ -36,6 +39,7 @@ except ImportError:
     mysql = None
 
 try:
+    from typing import Callable
     # Set user locale from the operating system
     locale.setlocale(locale.LC_ALL, "")
 except (locale.Error, IndexError):
@@ -43,7 +47,7 @@ except (locale.Error, IndexError):
 import gettext
 
 # -----------------------------------------
-global _
+global tl
 # -----------------------------------------
 
 # ---------- Localization setup ----------
@@ -52,10 +56,10 @@ LOCALE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "locale")
 try:
     # Find and load the translation file
     translation = gettext.translation(APP_NAME, localedir=LOCALE_DIR, fallback=True)
-    _ = translation.gettext
+    tl: Callable[[str], str] = translation.gettext
 except FileNotFoundError:
     # Fallback to default gettext if no .mo file is found
-    _ = gettext.gettext
+    tl = gettext.gettext
 
 # ---------- compression detection by magic number ----------
 MAGIC_TYPES = [
@@ -88,10 +92,10 @@ def open_maybe_compressed(path, mode="rt"):
         z = zipfile.ZipFile(path, "r")
         names = z.namelist()
         if not names:
-            raise ValueError(_("Empty zip file"))
+            raise ValueError(tl("Empty zip file"))
         if len(names) > 1:
             warnings.warn(
-                _(
+                tl(
                     "ZIP archive contains multiple files, using only the first one: {name}"
                 ).format(name=names[0])
             )
@@ -665,7 +669,7 @@ class DumpOptimizer:
         if db_type == "auto":
             db_type = detect_db_type(self.args["inpath"])
             if self.args.get("verbose"):
-                print(_("[INFO] Detected DB type: {db_type}").format(db_type=db_type))
+                print(tl("[INFO] Detected DB type: {db_type}").format(db_type=db_type))
         return MySQLHandler() if db_type == "mysql" else PostgresHandler()
 
     def _setup_progress(self):
@@ -673,7 +677,7 @@ class DumpOptimizer:
         filesize = os.path.getsize(self.args["inpath"])
         if self.args.get("verbose") and tqdm:
             progress = tqdm(
-                total=filesize, unit="B", unit_scale=True, desc=_("Processing")
+                total=filesize, unit="B", unit_scale=True, desc=tl("Processing")
             )
         else:
             progress = None
@@ -692,7 +696,7 @@ class DumpOptimizer:
                 }
                 if self.args.get("verbose"):
                     print(
-                        _(
+                        tl(
                             "[INFO] Created files for table {tname}: {sql_fname}, {tsv_fname}"
                         ).format(tname=tname, sql_fname=sql_fname, tsv_fname=tsv_fname)
                     )
@@ -703,7 +707,7 @@ class DumpOptimizer:
                     writer.write(self.handler.get_truncate_statement(tname))
                 self.file_map[tname] = writer
                 if self.args.get("verbose"):
-                    print(_("[INFO] Created file {fname}").format(fname=fname))
+                    print(tl("[INFO] Created file {fname}").format(fname=fname))
         if self.load_data_mode:
             return self.file_map[tname]["sql"]
         if self.split_mode or self.insert_only_mode:
@@ -789,7 +793,7 @@ class DumpOptimizer:
             return
         if self.progress:
             self.progress.set_description(
-                _("Processing table: {tname}").format(tname=tname)
+                tl("Processing table: {tname}").format(tname=tname)
             )
         prefix, values_body = extract_values_from_insert(stmt)
         if self.load_data_mode:
@@ -806,7 +810,7 @@ class DumpOptimizer:
                 except Exception as e:
                     if self.args.get("verbose"):
                         print(
-                            _(
+                            tl(
                                 "[WARN] Failed to parse VALUES in INSERT for table {tname}: {error}"
                             ).format(tname=tname, error=e)
                         )
@@ -834,7 +838,7 @@ class DumpOptimizer:
         except Exception as e:
             if self.args.get("verbose"):
                 print(
-                    _(
+                    tl(
                         "[WARN] Failed to parse VALUES in INSERT for table {tname}: {error}"
                     ).format(tname=tname, error=e)
                 )
@@ -881,9 +885,9 @@ class DumpOptimizer:
                 else open(os.devnull, "w")
             )
             if self.fout:
-                self.fout.write(_("-- Optimized by SqlDumpOptimizer\n"))
+                self.fout.write(tl("-- Optimized by SqlDumpOptimizer\n"))
                 self.fout.write(
-                    _("-- Source: {source}\n").format(
+                    tl("-- Source: {source}\n").format(
                         source=os.path.basename(self.args["inpath"])
                     )
                 )
@@ -926,7 +930,7 @@ class DumpOptimizer:
                 self.fout.close()
         if self.args.get("verbose"):
             print(
-                _("[INFO] Wrote {rows} records in {batches} batches.").format(
+                tl("[INFO] Wrote {rows} records in {batches} batches.").format(
                     rows=self.total_rows, batches=self.total_batches
                 )
             )
@@ -935,22 +939,22 @@ class DumpOptimizer:
             and not self.split_mode
             and not self.load_data_mode
         ):
-            print(_("Done. Saved to: {path}").format(path=self.args["outpath"]))
+            print(tl("Done. Saved to: {path}").format(path=self.args["outpath"]))
         elif self.split_mode:
             print(
-                _("Done. Split dump into files in directory: {path}").format(
+                tl("Done. Split dump into files in directory: {path}").format(
                     path=self.args["split_dir"]
                 )
             )
         elif self.load_data_mode:
             print(
-                _("Done. Generated files for import in directory: {path}").format(
+                tl("Done. Generated files for import in directory: {path}").format(
                     path=self.args["load_data_dir"]
                 )
             )
         elif self.insert_only_mode:
             print(
-                _("Done. Generated insert-only files in directory: {path}").format(
+                tl("Done. Generated insert-only files in directory: {path}").format(
                     path=self.args["insert_only"]
                 )
             )
@@ -970,7 +974,7 @@ class DumpAnalyzer:
         if db_type == "auto":
             db_type = detect_db_type(self.args["inpath"])
             if self.args.get("verbose"):
-                print(_("[INFO] Detected DB type: {db_type}").format(db_type=db_type))
+                print(tl("[INFO] Detected DB type: {db_type}").format(db_type=db_type))
         return MySQLHandler() if db_type == "mysql" else PostgresHandler()
 
     def _setup_progress(self):
@@ -978,7 +982,7 @@ class DumpAnalyzer:
         filesize = os.path.getsize(self.args["inpath"])
         if self.args.get("verbose") and tqdm:
             progress = tqdm(
-                total=filesize, unit="B", unit_scale=True, desc=_("Analyzing dump")
+                total=filesize, unit="B", unit_scale=True, desc=tl("Analyzing dump")
             )
         else:
             progress = None
@@ -1011,7 +1015,7 @@ class DumpAnalyzer:
         self.print_summary()
 
     def print_summary(self):
-        print("\n" + _("--- Dump Analysis Summary ---"))
+        print("\n" + tl("--- Dump Analysis Summary ---"))
         print(f"{'Table':<40} {'INSERT Statements':>20} {'Total Rows':>20}")
         print("-" * 82)
         total_rows = 0
@@ -1020,7 +1024,7 @@ class DumpAnalyzer:
             total_rows += data["rows"]
         print("-" * 82)
         print(
-            _("Found {num_tables} tables with a total of {total_rows} rows.").format(
+            tl("Found {num_tables} tables with a total of {total_rows} rows.").format(
                 num_tables=len(self.stats), total_rows=f"{total_rows:,d}"
             )
         )
@@ -1073,7 +1077,7 @@ class DatabaseDiffer:
                 total=filesize,
                 unit="B",
                 unit_scale=True,
-                desc=_("Parsing dump for diff"),
+                desc=tl("Parsing dump for diff"),
             )
         else:
             progress = None
@@ -1090,12 +1094,12 @@ class DatabaseDiffer:
             self.cursor = self.connection.cursor(dictionary=True)
             if self.args.get("verbose"):
                 print(
-                    _(
+                    tl(
                         "[INFO] Successfully connected to database '{db}' on {host}"
                     ).format(db=self.args["db_name"], host=self.args["db_host"])
                 )
         except mysql.connector.Error as err:
-            print(_("[ERROR] Database connection failed: {error}").format(error=err))
+            print(tl("[ERROR] Database connection failed: {error}").format(error=err))
             sys.exit(1)
 
     def get_db_schema(self, table_name: str) -> dict[str, dict]:
@@ -1162,7 +1166,7 @@ class DatabaseDiffer:
             keys.add(pk_tuple)
         if self.args.get("verbose"):
             print(
-                _("[INFO] Fetched {count} primary keys for table `{tname}`.").format(
+                tl("[INFO] Fetched {count} primary keys for table `{tname}`.").format(
                     count=len(keys), tname=table_name
                 )
             )
@@ -1246,7 +1250,7 @@ class DatabaseDiffer:
                     )
                     if progress:
                         progress.set_description(
-                            _("Diffing schema for {tname}").format(tname=tname)
+                            tl("Diffing schema for {tname}").format(tname=tname)
                         )
                     db_cols = self.get_db_schema(tname)
                     if not db_cols:
@@ -1282,7 +1286,7 @@ class DatabaseDiffer:
                     if not table_info.get("pk"):
                         if self.args.get("verbose"):
                             print(
-                                _(
+                                tl(
                                     "[WARN] Skipping data diff for table `{tname}`: no primary key found."
                                 ).format(tname=tname)
                             )
@@ -1291,7 +1295,7 @@ class DatabaseDiffer:
                     if "db_pks" not in table_info:
                         if progress:
                             progress.set_description(
-                                _("Diffing data for {tname}").format(tname=tname)
+                                tl("Diffing data for {tname}").format(tname=tname)
                             )
                         table_info["db_pks"] = self.get_db_primary_keys(
                             tname, table_info["pk"]
@@ -1324,7 +1328,7 @@ class DatabaseDiffer:
                                     self.summary["rows_updated"] += 1
                                     fout.write(f"{update_stmt}\n")
             if progress:
-                progress.set_description(_("Generating DELETE statements"))
+                progress.set_description(tl("Generating DELETE statements"))
             if self.args.get("diff_data") and not self.args.get("insert_only"):
                 fout.write(
                     "\n-- Deleting rows that exist in the database but not in the dump\n"
@@ -1349,34 +1353,34 @@ class DatabaseDiffer:
             self.connection.close()
         if self.progress:
             self.progress.close()
-        self.display_info(_)
+        self.display_info()
 
-    def display_info(self, _):
-        print(_("Done. Diff saved to: {path}").format(path=self.args["outpath"]))
-        print("\n" + _("--- Diff Summary ---"))
+    def display_info(self):
+        print(tl("Done. Diff saved to: {path}").format(path=self.args["outpath"]))
+        print("\n" + tl("--- Diff Summary ---"))
         if not self.args.get("insert_only"):
             print(
-                _("Tables to create: {count}").format(
+                tl("Tables to create: {count}").format(
                     count=self.summary["tables_created"]
                 )
             )
             print(
-                _("Tables to alter: {count}").format(
+                tl("Tables to alter: {count}").format(
                     count=self.summary["tables_altered"]
                 )
             )
         if self.args.get("diff_data"):
             print(
-                _("Rows to insert: {count}").format(count=self.summary["rows_inserted"])
+                tl("Rows to insert: {count}").format(count=self.summary["rows_inserted"])
             )
             if not self.args.get("insert_only"):
                 print(
-                    _("Rows to update: {count}").format(
+                    tl("Rows to update: {count}").format(
                         count=self.summary["rows_updated"]
                     )
                 )
                 print(
-                    _("Rows to delete: {count}").format(
+                    tl("Rows to delete: {count}").format(
                         count=self.summary["rows_deleted"]
                     )
                 )
@@ -1409,6 +1413,18 @@ class DatabaseDiffer:
         safe_val = str(v).replace("'", "''")
         return f"'{safe_val}'"
 
+def _load_config(config_file="optimize_sql_dump.ini"):
+    config = configparser.ConfigParser(allow_no_value=True, inline_comment_prefixes=("#", ";"))
+    config_defaults = {}
+    boolean_flags = {"verbose", "dry_run", "diff_from_db", "diff_data", "info"}
+    boolean_like_flags = {"split", "load_data_dir", "insert_only"}
+    if os.path.exists(config_file) and os.path.getsize(config_file) > 0:
+        config.read(config_file)
+        _parse_config_sections(
+            config, config_defaults, boolean_flags, boolean_like_flags
+        )
+    return config_defaults
+
 
 def optimize_dump(**kwargs):
     if kwargs.get("diff_from_db"):
@@ -1420,19 +1436,6 @@ def optimize_dump(**kwargs):
     else:
         optimizer = DumpOptimizer(**kwargs)
         optimizer.run()
-
-
-def _load_config(config_file="optimize_sql_dump.ini"):
-    config = configparser.ConfigParser(allow_no_value=True)
-    config_defaults = {}
-    boolean_flags = {"verbose", "dry_run", "diff_from_db", "diff_data", "info"}
-    boolean_like_flags = {"split", "load_data_dir", "insert_only"}
-    if os.path.exists(config_file):
-        config.read(config_file)
-        _parse_config_sections(
-            config, config_defaults, boolean_flags, boolean_like_flags
-        )
-    return config_defaults
 
 
 def _parse_config_sections(config, config_defaults, boolean_flags, boolean_like_flags):
@@ -1454,6 +1457,7 @@ def _parse_config_sections(config, config_defaults, boolean_flags, boolean_like_
         "db-user": "db_user",
         "db-password": "db_password",
         "db-name": "db_name",
+        "verbose": "verbose",
     }
 
     def load_section(section_name, mapping):
@@ -1474,184 +1478,160 @@ def _parse_config_sections(config, config_defaults, boolean_flags, boolean_like_
 
 
 def _create_arg_parser(p: argparse.ArgumentParser) -> argparse.ArgumentParser:
+    # --- Input/Output Arguments ---
+    p.add_argument("input", nargs="?", help=tl("Dump file (can be .gz/.bz2/.xz/.zip)"))
     p.add_argument(
-        "positional",
-        nargs="*",
-        help=_("Optional form: <input_file> <output_file>"),
+        "--input", "-i", dest="input_override", help=tl("Override positional input file")
     )
-    p.add_argument("--input", "-i", help=_("Dump file (can be .gz/.bz2/.xz/.zip)"))
-    p.add_argument("--output", "-o", help=_("Output file (optimized)"))
+    p.add_argument("output", nargs="?", help=tl("Output file (optimized)"))
+
     p.add_argument(
         "--db-type",
         choices=["auto", "mysql", "postgres"],
-        help=_("Database dialect: mysql/postgres or auto (default)"),
+        help=tl("Database dialect: mysql/postgres or auto (default)"),
     )
     p.add_argument(
         "--table",
         "-t",
         type=str,
-        help=_("If specified, optimize only this table (name without schema)"),
+        help=tl("If specified, optimize only this table (name without schema)"),
     )
     p.add_argument(
         "--batch-size",
         type=int,
-        help=_("Number of tuples in a single merged INSERT (default: 1000)"),
+        help=tl("Number of tuples in a single merged INSERT (default: 1000)"),
     )
     p.add_argument(
-        "--verbose", "-v", action="store_true", help=_("Print diagnostic information")
+        "--verbose", "-v", action="store_true", help=tl("Print diagnostic information")
     )
     p.add_argument(
-        "--dry-run",
-        action="store_true",
-        help=_("Dry run mode: does not write the output file"),
+        "--dry-run", action="store_true", help=tl("Dry run: does not write output")
     )
-    p.add_argument(
+
+    # --- Mutually Exclusive Output Modes ---
+    output_mode_group = p.add_mutually_exclusive_group()
+    output_mode_group.add_argument(
+        "--output", "-o", dest="output_override", help=tl("Override positional output file")
+    )
+    output_mode_group.add_argument(
         "--split",
         nargs="?",
         const=".",
-        help=_(
-            "Split the dump into separate files per table. "
-            "If a directory is provided, files will be saved there. "
-            "If no value is given, use the current directory."
+        dest="split_dir",
+        help=tl(
+            "Split dump into files per table. Optional dir, defaults to current."
         ),
     )
-    p.add_argument(
+    output_mode_group.add_argument(
         "--load-data",
         nargs="?",
         const=".",
         dest="load_data_dir",
-        help=_(
-            "[MySQL ONLY] Generate .sql and .tsv files for LOAD DATA INFILE. "
-            "Requires a directory (defaults to current). Mutually exclusive with --output and --split."
+        help=tl(
+            "[MySQL] Generate files for LOAD DATA. Optional dir, defaults to current."
         ),
     )
-    p.add_argument(
-        "--tsv-buffer-size",
-        type=int,
-        help=_(
-            "[--load-data ONLY] Number of rows buffered before writing to the .tsv file (default: 200)"
-        ),
-    )
-    p.add_argument(
+    output_mode_group.add_argument(
         "--insert-only",
         nargs="?",
         const=".",
-        help=_(
-            "Generate insert-only files per table, each containing TRUNCATE and INSERTs. "
-            "If a directory is provided, files will be saved there. "
-            "If no value is given, use the current directory. "
-            "Mutually exclusive with other output modes."
+        help=tl(
+            "Generate insert-only files (TRUNCATE + INSERTs). Optional dir, defaults to current."
         ),
     )
-    p.add_argument(
+    output_mode_group.add_argument(
         "--info",
         action="store_true",
-        help=_(
-            "Analyze the dump file and print a summary of its contents (tables, rows) without writing any files."
-        ),
+        help=tl("Analyze dump and print summary without writing files."),
     )
-    diff_group = p.add_argument_group(_("Database Diffing (Experimental)"))
+
+    # --- Options for Specific Modes ---
+    p.add_argument(
+        "--tsv-buffer-size",
+        type=int,
+        help=tl("[--load-data] Buffer size for TSV rows (default: 200)"),
+    )
+
+    # --- Database Diffing Group ---
+    diff_group = p.add_argument_group(tl("Database Diffing (Experimental)"))
     diff_group.add_argument(
         "--diff-from-db",
         action="store_true",
-        help=_(
-            "Generate a diff SQL file by comparing the dump against a live database."
+        help=tl(
+            "Generate a diff by comparing the dump against a live database."
         ),
     )
     diff_group.add_argument(
         "--diff-data",
         action="store_true",
-        help=_(
+        help=tl(
             "Also compare table data and generate INSERT/UPDATE/DELETE statements (requires --diff-from-db)."
         ),
     )
-    diff_group.add_argument("--db-host", help=_("Database host for diffing."))
-    diff_group.add_argument("--db-user", help=_("Database user for diffing."))
-    diff_group.add_argument("--db-password", help=_("Database password for diffing."))
-    diff_group.add_argument("--db-name", help=_("Database name for diffing."))
+    diff_group.add_argument("--db-host", help=tl("Database host for diffing."))
+    diff_group.add_argument("--db-user", help=tl("Database user for diffing."))
+    diff_group.add_argument("--db-password", help=tl("Database password for diffing."))
+    diff_group.add_argument("--db-name", help=tl("Database name for diffing."))
     return p
 
 
 def _validate_args(p, args):
-    if args.positional and not args.input:
-        args.input = args.positional[0]
-        if (
-            len(args.positional) > 1
-            and not args.output
-            and not args.split
-            and not args.load_data_dir
-            and not args.insert_only
-        ):
-            args.output = args.positional[1]
+    # Consolidate positional and named input/output arguments
+    args.input = args.input_override or args.input
+    args.output = args.output_override or args.output
+
+    # Check for required input file
     if not args.input:
         p.error(
-            _(
-                "You must provide an input dump (--input or the first positional argument)"
-            )
+            tl("You must provide an input dump file (e.g., `script.py dump.sql`)")
         )
     if not os.path.exists(args.input):
-        print(_("File not found: {path}").format(path=args.input))
+        print(tl("File not found: {path}").format(path=args.input))
         sys.exit(2)
+
+    # Check for at least one output mode if not using --diff-from-db
+    is_output_mode_set = any(
+        [args.output, args.split_dir, args.load_data_dir, args.insert_only, args.info]
+    )
+    if not is_output_mode_set and not args.diff_from_db:
+        p.error(
+            tl(
+                "You must specify an output mode (e.g., `script.py in.sql out.sql` or use a flag like --split, --info)."
+            )
+        )
+
+    # Append .sql to output filename if needed
     if args.output and not args.output.lower().endswith(".sql"):
         if args.verbose:
             print(
-                _(
-                    "[INFO] Output filename does not end with .sql, appending it. New name: {name}"
+                tl(
+                    "[INFO] Output filename does not end with .sql, appending it. New name: {name}",
                 ).format(name=args.output + ".sql")
             )
         args.output += ".sql"
-    # output_mode_val = args.output if not args.diff_from_db else None
-    # Correctly count active modes, treating False for action='store_true' flags as inactive.
-    active_modes = [args.output, args.split, args.load_data_dir]
-    if args.diff_from_db:
-        active_modes.append(True)
-    if args.info:
-        active_modes.append(True)
-    num_primary_modes = sum(1 for mode in active_modes if mode)
-    if args.insert_only:
-        if num_primary_modes == 0:
-            pass
-        elif num_primary_modes == 1 and (args.diff_from_db or args.info):
-            pass
-        else:
-            p.error(
-                _(
-                    "--insert-only can be used either standalone or with --diff-from-db/--info, but not with other output modes."
-                )
-            )
-    elif num_primary_modes == 0:
-        p.error(
-            _(
-                "You must specify an output mode like --output, --split, --diff-from-db, etc."
-            )
-        )
-    elif num_primary_modes > 1:
-        p.error(
-            _(
-                "Primary output modes (--output, --split, --load-data, --diff-from-db, --info) are mutually exclusive."
-            )
-        )
+
+    # Validate --diff-from-db dependencies
     if args.diff_from_db:
         if not mysql:
             p.error(
-                _(
-                    "The 'mysql-connector-python' library is required for --diff-from-db. Please install it using: pip install mysql-connector-python"
+                tl(
+                    "The 'mysql-connector-python' library is required for --diff-from-db. Please install it."
                 )
             )
         if not args.output:
-            p.error(_("--diff-from-db requires --output to be specified."))
+            p.error(tl("--diff-from-db requires --output to be specified."))
         if not args.db_user or not args.db_name:
-            p.error(_("--diff-from-db requires --db-user and --db-name."))
+            p.error(tl("--diff-from-db requires --db-user and --db-name."))
         if args.db_type != "mysql" and args.db_type != "auto":
-            p.error(_("--diff-from-db currently only supports MySQL."))
+            p.error(tl("--diff-from-db currently only supports MySQL."))
         if args.diff_data and not args.diff_from_db:
-            p.error(_("--diff-data can only be used with --diff-from-db."))
+            p.error(tl("--diff-data can only be used with --diff-from-db."))
         args.db_type = "mysql"
 
 
 def set_parse_arguments_and_config():
     parser = argparse.ArgumentParser(
-        description=_(
+        description=tl(
             "SQL Dump Optimizer: merges INSERTs, detects compression, supports MySQL/Postgres."
         )
     )
@@ -1675,9 +1655,9 @@ def main():
     kwargs = vars(args)
     kwargs["inpath"] = kwargs.pop("input")
     kwargs["outpath"] = kwargs.pop("output")
+    kwargs.pop("input_override", None)
+    kwargs.pop("output_override", None)
     kwargs["target_table"] = kwargs.pop("table")
-    kwargs["split_dir"] = kwargs.pop("split")
-    kwargs.pop("positional", None)
     optimize_dump(**kwargs)
 
 

@@ -3,7 +3,7 @@ import gzip
 import lzma
 import sys
 import zipfile
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 import optimize_sql_dump as opt
@@ -134,6 +134,29 @@ class TestPostgresHandler:
         dump_file.write_text("COPY public.users (id, name) FROM STDIN;\n1\tAlice\n\\.\n")
         db_type = opt.detect_db_type(str(dump_file))
         assert db_type == "postgres"
+
+
+class TestHelperFunctions:
+    @pytest.mark.parametrize(
+        "stmt, expected_prefix, expected_values",
+        [
+            (
+                "INSERT INTO `t` VALUES (1, 'a'), (2, 'b');",
+                "INSERT INTO `t` VALUES",
+                "(1, 'a'), (2, 'b')",
+            ),
+            (
+                "insert into t (c1, c2) values (1, 'a');",
+                "insert into t (c1, c2) values",
+                "(1, 'a')",
+            ),
+            ("CREATE TABLE t (id INT);", None, None),
+        ],
+    )
+    def test_extract_values_from_insert(self, stmt, expected_prefix, expected_values):
+        prefix, values = opt.extract_values_from_insert(stmt)
+        assert prefix == expected_prefix
+        assert values == expected_values
 
 
 class TestSqlTupleParsers:
@@ -384,3 +407,112 @@ class TestDatabaseDiffer:
         ])
     def test_format_sql_value(self, differ, input_val, expected_sql):
         assert differ._format_sql_value(input_val) == expected_sql
+
+    def test_compare_schemas_add_column(self, differ):
+        dump_cols = {
+            "id": "`id` int NOT NULL",
+            "name": "`name` varchar(255) NULL",
+            "email": "`email` varchar(255) NOT NULL",
+        }
+        db_cols = {
+            "id": {"COLUMN_NAME": "id", "COLUMN_TYPE": "int"},
+            "name": {"COLUMN_NAME": "name", "COLUMN_TYPE": "varchar(255)"},
+        }
+        statements = differ.compare_schemas(dump_cols, db_cols, "users")
+        assert len(statements) == 1
+        assert "ADD COLUMN `email` varchar(255) NOT NULL" in statements[0]
+        assert "AFTER `name`" in statements[0]
+
+    def test_compare_schemas_modify_column(self, differ):
+        dump_cols = {
+            "id": "`id` int NOT NULL",
+            "name": "`name` text NULL",
+        }
+        db_cols = {
+            "id": {"COLUMN_NAME": "id", "COLUMN_TYPE": "int"},
+            "name": {
+                "COLUMN_NAME": "name",
+                "COLUMN_TYPE": "varchar(255)",
+                "IS_NULLABLE": "YES",
+                "COLUMN_DEFAULT": None,
+                "EXTRA": "",
+                "CHARACTER_SET_NAME": "utf8mb4",
+                "COLLATION_NAME": "utf8mb4_unicode_ci",
+            },
+        }
+        statements = differ.compare_schemas(dump_cols, db_cols, "users")
+        assert len(statements) == 1
+        assert "MODIFY COLUMN `name` text NULL" in statements[0]
+
+    def test_compare_schemas_no_change(self, differ):
+        dump_cols = {"id": "`id` int NOT NULL"}
+        db_cols = {
+            "id": {
+                "COLUMN_NAME": "id",
+                "COLUMN_TYPE": "int",
+                "IS_NULLABLE": "NO",
+                "COLUMN_DEFAULT": None,
+                "EXTRA": "auto_increment",
+                "CHARACTER_SET_NAME": None,
+                "COLLATION_NAME": None,
+            }
+        }
+        statements = differ.compare_schemas(dump_cols, db_cols, "users")
+        assert len(statements) == 0
+
+    def test_compare_data_row_update(self, differ):
+        dump_row = {"id": 1, "name": "new_name", "email": "test@test.com"}
+        db_row = {"id": 1, "name": "old_name", "email": "test@test.com"}
+        pk_cols = ["id"]
+        update_stmt = differ.compare_data_row(dump_row, db_row, "users", pk_cols)
+        assert update_stmt is not None
+        assert "UPDATE `users` SET `name` = 'new_name' WHERE `id` = 1;" in update_stmt
+
+    def test_compare_data_row_no_change(self, differ):
+        dump_row = {"id": 1, "name": "same_name"}
+        db_row = {"id": 1, "name": "same_name"}
+        pk_cols = ["id"]
+        update_stmt = differ.compare_data_row(dump_row, db_row, "users", pk_cols)
+        assert update_stmt is None
+
+    def test_run_generates_delete(self, tmp_path):
+        """
+        Integration-like test for the DELETE generation logic in `run`.
+        """
+        in_file = tmp_path / "dump.sql"
+        out_file = tmp_path / "diff.sql"
+        in_file.write_text(
+            "CREATE TABLE `users` (`id` int, PRIMARY KEY (`id`));\n"
+            "INSERT INTO `users` VALUES (1);"
+        )
+
+        args = {
+            "inpath": str(in_file),
+            "outpath": str(out_file),
+            "db_name": "testdb",
+            "diff_data": True,
+            "insert_only": False,
+            "verbose": False,
+        }
+
+        # We need to patch mysql.connector if it's not installed
+        if "mysql" not in sys.modules:
+            sys.modules["mysql"] = MagicMock()
+            sys.modules["mysql.connector"] = MagicMock()
+
+        differ = opt.DatabaseDiffer(**args)
+
+        # Mock database interactions
+        differ.connect_db = MagicMock()
+        differ.get_db_schema = MagicMock(return_value={"id": {}})  # Table exists
+        # DB has PKs (1,) and (2,). Dump only has (1,). So (2,) should be deleted.
+        differ.get_db_primary_keys = MagicMock(return_value={(1,), (2,)})
+        differ.get_db_row_by_pk = MagicMock(return_value={"id": 1})
+
+        differ.run()
+
+        output = out_file.read_text()
+
+        assert "-- Deleting rows" in output
+        assert "DELETE FROM `users` WHERE `id` = 2;" in output
+        assert "DELETE FROM `users` WHERE `id` = 1;" not in output
