@@ -1111,6 +1111,7 @@ class DatabaseDiffer:
             diff_data=kwargs.get("diff_data", False),
             insert_only=kwargs.get("insert_only", False),
         )
+
     def _setup_progress(self):
         global progress
         filesize = os.path.getsize(self.args["inpath"])
@@ -1440,6 +1441,7 @@ class DatabaseDiffer:
         # This is for generating INSERT/UPDATE values, not DEFAULT clauses.
         safe_val = str(v).replace("'", "''")
         return f"'{safe_val}'"
+
 
 def _load_config(config_file="optimize_sql_dump.ini"):
     config = configparser.ConfigParser(allow_no_value=True, inline_comment_prefixes=("#", ";"))
