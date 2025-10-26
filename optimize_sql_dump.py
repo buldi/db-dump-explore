@@ -172,6 +172,10 @@ class DatabaseHandler(ABC):
         pass
 
     @abstractmethod
+    def get_truncate_statement(self, tname: str) -> str:
+        pass
+
+    @abstractmethod
     def detect_db_type(path):
         """Try to detect if the dump is from MySQL or PostgreSQL."""
         with open_maybe_compressed(path, "rt") as f:
@@ -1051,6 +1055,48 @@ def escape_sql_value(val, prefix_str: str = "") -> str:
     return f"{prefix_str} {val}"
 
 
+class DiffSummary:
+    """Manages and displays the summary of a database diff operation."""
+
+    def __init__(self, diff_data=False, insert_only=False):
+        self.diff_data = diff_data
+        self.insert_only = insert_only
+        self.counts = {
+            "tables_created": 0,
+            "tables_altered": 0,
+            "rows_inserted": 0,
+            "rows_updated": 0,
+            "rows_deleted": 0,
+        }
+
+    def increment(self, key, count=1):
+        if key in self.counts:
+            self.counts[key] += count
+
+    def display(self, outpath):
+        print(tl("Done. Diff saved to: {path}").format(path=outpath))
+        print("\n" + tl("--- Diff Summary ---"))
+        if not self.insert_only:
+            print(
+                tl("Tables to create: {count}").format(
+                    count=self.counts["tables_created"]
+                )
+            )
+            print(
+                tl("Tables to alter: {count}").format(
+                    count=self.counts["tables_altered"]
+                )
+            )
+        if self.diff_data:
+            print(
+                tl("Rows to insert: {count}").format(count=self.counts["rows_inserted"])
+            )
+            if not self.insert_only:
+                print(tl("Rows to update: {count}").format(count=self.counts["rows_updated"]))
+                print(tl("Rows to delete: {count}").format(count=self.counts["rows_deleted"]))
+        print("--------------------\n")
+
+
 class DatabaseDiffer:
     def __init__(self, **kwargs):
         self.args = kwargs
@@ -1061,14 +1107,10 @@ class DatabaseDiffer:
         self.connection = None
         self.cursor = None
         self.create_map = {}
-        self.summary = {
-            "tables_created": 0,
-            "tables_altered": 0,
-            "rows_inserted": 0,
-            "rows_updated": 0,
-            "rows_deleted": 0,
-        }
-
+        self.summary = DiffSummary(
+            diff_data=kwargs.get("diff_data", False),
+            insert_only=kwargs.get("insert_only", False),
+        )
     def _setup_progress(self):
         global progress
         filesize = os.path.getsize(self.args["inpath"])
@@ -1082,6 +1124,8 @@ class DatabaseDiffer:
         else:
             progress = None
         return progress
+
+    # --- Database Interaction ---
 
     def connect_db(self):
         try:
@@ -1114,6 +1158,36 @@ class DatabaseDiffer:
         self.cursor.execute(query, (self.args["db_name"], table_name))
         schema = {row["COLUMN_NAME"]: row for row in self.cursor.fetchall()}
         return schema
+
+    def get_db_primary_keys(self, table_name: str, pk_cols: list[str]) -> set:
+        if not self.connection or not pk_cols:
+            return set()
+        pk_cols_str = ", ".join([f"`{c}`" for c in pk_cols])
+        query = f"SELECT {pk_cols_str} FROM `{table_name}`"
+        self.cursor.execute(query)
+        keys = set()
+        for row in self.cursor.fetchall():
+            pk_tuple = tuple(str(row[c]) for c in pk_cols)
+            keys.add(pk_tuple)
+        if self.args.get("verbose"):
+            print(
+                tl("[INFO] Fetched {count} primary keys for table `{tname}`.").format(
+                    count=len(keys), tname=table_name
+                )
+            )
+        return keys
+
+    def get_db_row_by_pk(
+        self, table_name: str, pk_cols: list[str], pk_values: tuple
+    ) -> dict | None:
+        if not self.connection or not pk_cols or len(pk_cols) != len(pk_values):
+            return None
+        where_clause = " AND ".join([f"`{col}` = %s" for col in pk_cols])
+        query = f"SELECT * FROM `{table_name}` WHERE {where_clause}"
+        self.cursor.execute(query, pk_values)
+        return self.cursor.fetchone()
+
+    # --- Schema and Data Comparison ---
 
     def compare_schemas(
         self, dump_cols: dict[str, str], db_cols: dict[str, dict], table_name: str
@@ -1154,34 +1228,6 @@ class DatabaseDiffer:
             last_col = col_name
         return alter_statements
 
-    def get_db_primary_keys(self, table_name: str, pk_cols: list[str]) -> set:
-        if not self.connection or not pk_cols:
-            return set()
-        pk_cols_str = ", ".join([f"`{c}`" for c in pk_cols])
-        query = f"SELECT {pk_cols_str} FROM `{table_name}`"
-        self.cursor.execute(query)
-        keys = set()
-        for row in self.cursor.fetchall():
-            pk_tuple = tuple(str(row[c]) for c in pk_cols)
-            keys.add(pk_tuple)
-        if self.args.get("verbose"):
-            print(
-                tl("[INFO] Fetched {count} primary keys for table `{tname}`.").format(
-                    count=len(keys), tname=table_name
-                )
-            )
-        return keys
-
-    def get_db_row_by_pk(
-        self, table_name: str, pk_cols: list[str], pk_values: tuple
-    ) -> dict | None:
-        if not self.connection or not pk_cols or len(pk_cols) != len(pk_values):
-            return None
-        where_clause = " AND ".join([f"`{col}` = %s" for col in pk_cols])
-        query = f"SELECT * FROM `{table_name}` WHERE {where_clause}"
-        self.cursor.execute(query, pk_values)
-        return self.cursor.fetchone()
-
     def compare_data_row(
         self, dump_row: dict, db_row: dict, table_name: str, pk_cols: list[str]
     ) -> str | None:
@@ -1216,11 +1262,126 @@ class DatabaseDiffer:
         final_params = [format_value(p) for p in params]
         return update_stmt.replace("%s", "{}").format(*final_params)
 
-    def run(self):
-        self.connect_db()
+    # --- Main Processing Logic ---
+
+    def _handle_create_statement(self, stmt, fout):
+        m = re.search(
+            r"CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?`?(?P<name>[^`\s\(;]+)`?",
+            stmt,
+            re.I,
+        )
+        if not m:
+            return
+
+        tname = self.handler.normalize_table_name(m.group("name"))
+        dump_cols = self.handler.extract_full_column_definitions(stmt)
+
+        self.create_map[tname] = {
+            "stmt": stmt,
+            "cols": list(dump_cols.keys()),
+            "pk": self.handler.extract_primary_key(stmt),
+            "exists_in_db": True,
+        }
+
+        if progress:
+            progress.set_description(tl("Diffing schema for {tname}").format(tname=tname))
+
+        db_cols = self.get_db_schema(tname)
+        if not db_cols:
+            if not self.args.get("insert_only"):
+                self.summary.increment("tables_created")
+                fout.write(f"-- Table `{tname}` does not exist in the database.\n{stmt};\n")
+            self.create_map[tname]["exists_in_db"] = False
+        elif not self.args.get("insert_only"):
+            alter_statements = self.compare_schemas(dump_cols, db_cols, tname)
+            if alter_statements:
+                self.summary.increment("tables_altered")
+                fout.write(f"-- Schema changes for table `{tname}`\n")
+                fout.write("\n".join(alter_statements) + "\n")
+
+    def _handle_insert_statement(self, stmt, fout):
+        if not self.args.get("diff_data"):
+            return
+
+        tname = extract_table_from_insert(stmt, self.handler)
+        if not tname or tname not in self.create_map:
+            return
+
+        table_info = self.create_map[tname]
+        if not table_info["exists_in_db"]:
+            _, values_body = extract_values_from_insert(stmt)
+            if values_body:
+                for tuple_str in SqlMultiTupleParser(values_body):
+                    self.summary.increment("rows_inserted")
+                    fout.write(f"INSERT INTO `{tname}` VALUES {tuple_str};\n")
+            return
+
+        if not table_info.get("pk"):
+            if self.args.get("verbose") and not table_info.get("pk_checked"):
+                print(
+                    tl("[WARN] Skipping data diff for table `{tname}`: no primary key found.").format(
+                        tname=tname
+                    )
+                )
+                table_info["pk_checked"] = True
+            return
+
+        if "db_pks" not in table_info:
+            if progress:
+                progress.set_description(tl("Diffing data for {tname}").format(tname=tname))
+            table_info["db_pks"] = self.get_db_primary_keys(tname, table_info["pk"])
+            table_info["dump_pks"] = set()
+
+        _, values_body = extract_values_from_insert(stmt)
+        if not values_body:
+            return
+
+        for tuple_str in SqlMultiTupleParser(values_body):
+            dump_row_list = self._parse_single_tuple_to_fields(tuple_str)
+            dump_row_dict = dict(zip(table_info["cols"], dump_row_list))
+            pk_values = tuple(str(dump_row_dict.get(c)) for c in table_info["pk"])
+            table_info["dump_pks"].add(pk_values)
+
+            if pk_values not in table_info["db_pks"]:
+                self.summary.increment("rows_inserted")
+                cols_str = ", ".join(f"`{c}`" for c in table_info["cols"])
+                vals_str = ", ".join(self._format_sql_value(v) for v in dump_row_list)
+                fout.write(f"INSERT INTO `{tname}` ({cols_str}) VALUES ({vals_str});\n")
+            elif not self.args.get("insert_only"):
+                db_row = self.get_db_row_by_pk(tname, table_info["pk"], pk_values)
+                if db_row:
+                    update_stmt = self.compare_data_row(
+                        dump_row_dict, db_row, tname, table_info["pk"]
+                    )
+                    if update_stmt:
+                        self.summary.increment("rows_updated")
+                        fout.write(f"{update_stmt}\n")
+
+    def _generate_delete_statements(self, fout):
+        if not self.args.get("diff_data") or self.args.get("insert_only"):
+            return
+
+        if progress:
+            progress.set_description(tl("Generating DELETE statements"))
+
+        fout.write("\n-- Deleting rows that exist in the database but not in the dump\n")
+        for tname, table_info in self.create_map.items():
+            if "db_pks" in table_info and "dump_pks" in table_info:
+                pks_to_delete = table_info["db_pks"] - table_info["dump_pks"]
+                if pks_to_delete:
+                    pk_cols = table_info["pk"]
+                    self.summary.increment("rows_deleted", len(pks_to_delete))
+                    for pk_tuple in pks_to_delete:
+                        where_clause = " AND ".join(
+                            f"`{col}` = {self._format_sql_value(val)}"
+                            for col, val in zip(pk_cols, pk_tuple)
+                        )
+                        fout.write(f"DELETE FROM `{tname}` WHERE {where_clause};\n")
+
+    def _process_statements(self, fin, fout):
         with (
-            open_maybe_compressed(self.args["inpath"], "rt") as fin,
-            open(self.args["outpath"], "w", encoding="utf-8") as fout,
+            fin,
+            fout,
         ):
             fout.write(
                 f"-- Diff generated by SqlDumpOptimizer\n"
@@ -1229,162 +1390,29 @@ class DatabaseDiffer:
             )
             for stype, stmt in iter_statements(fin):
                 if stype == "create":
-                    m = re.search(
-                        r"CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?`?(?P<name>[^`\s\(;]+)`?",
-                        stmt,
-                        re.I,
-                    )
-                    if not m:
-                        continue
-                    tname = self.handler.normalize_table_name(m.group("name"))
-                    self.create_map[tname] = {
-                        "stmt": stmt,
-                        "cols": [],
-                        "pk": [],
-                        "exists_in_db": True,
-                    }
-                    dump_cols = self.handler.extract_full_column_definitions(stmt)
-                    self.create_map[tname]["cols"] = list(dump_cols.keys())
-                    self.create_map[tname]["pk"] = self.handler.extract_primary_key(
-                        stmt
-                    )
-                    if progress:
-                        progress.set_description(
-                            tl("Diffing schema for {tname}").format(tname=tname)
-                        )
-                    db_cols = self.get_db_schema(tname)
-                    if not db_cols:
-                        if not self.args.get("insert_only"):
-                            self.summary["tables_created"] += 1
-                            fout.write(
-                                f"-- Table `{tname}` does not exist in the database.\n{stmt};\n"
-                            )
-                        self.create_map[tname]["exists_in_db"] = False
-                    else:
-                        if not self.args.get("insert_only"):
-                            alter_statements = self.compare_schemas(
-                                dump_cols, db_cols, tname
-                            )
-                            if alter_statements:
-                                self.summary["tables_altered"] += 1
-                                fout.write(f"-- Schema changes for table `{tname}`\n")
-                                fout.write("\n".join(alter_statements))
-                                fout.write("\n")
-                elif stype == "insert" and self.args.get("diff_data"):
-                    tname = extract_table_from_insert(stmt, self.handler)
-                    if not tname or tname not in self.create_map:
-                        continue
-                    table_info = self.create_map[tname]
-                    if not table_info["exists_in_db"]:
-                        _, values_body = extract_values_from_insert(stmt)
-                        if not values_body:
-                            continue
-                        for tuple_str in SqlMultiTupleParser(values_body):
-                            self.summary["rows_inserted"] += 1
-                            fout.write(f"INSERT INTO `{tname}` VALUES {tuple_str};\n")
-                        continue
-                    if not table_info.get("pk"):
-                        if self.args.get("verbose"):
-                            print(
-                                tl(
-                                    "[WARN] Skipping data diff for table `{tname}`: no primary key found."
-                                ).format(tname=tname)
-                            )
-                        table_info["pk_checked"] = True
-                        continue
-                    if "db_pks" not in table_info:
-                        if progress:
-                            progress.set_description(
-                                tl("Diffing data for {tname}").format(tname=tname)
-                            )
-                        table_info["db_pks"] = self.get_db_primary_keys(
-                            tname, table_info["pk"]
-                        )
-                        table_info["dump_pks"] = set()
-                    _, values_body = extract_values_from_insert(stmt)
-                    if not values_body:
-                        continue
-                    for tuple_str in SqlMultiTupleParser(values_body):
-                        dump_row_list = self._parse_single_tuple_to_fields(tuple_str)
-                        dump_row_dict = dict(zip(table_info["cols"], dump_row_list))
-                        pk_values = tuple(
-                            str(dump_row_dict.get(c)) for c in table_info["pk"]
-                        )
-                        table_info["dump_pks"].add(pk_values)
-                        if pk_values not in table_info["db_pks"]:
-                            self.summary["rows_inserted"] += 1
-                            fout.write(
-                                f"INSERT INTO `{tname}` ({', '.join(f'`{c}`' for c in table_info['cols'])}) VALUES ({', '.join(self._format_sql_value(v) for v in dump_row_list)});\n"
-                            )
-                        elif not self.args.get("insert_only"):
-                            db_row = self.get_db_row_by_pk(
-                                tname, table_info["pk"], pk_values
-                            )
-                            if db_row:
-                                update_stmt = self.compare_data_row(
-                                    dump_row_dict, db_row, tname, table_info["pk"]
-                                )
-                                if update_stmt:
-                                    self.summary["rows_updated"] += 1
-                                    fout.write(f"{update_stmt}\n")
-            if progress:
-                progress.set_description(tl("Generating DELETE statements"))
-            if self.args.get("diff_data") and not self.args.get("insert_only"):
-                fout.write(
-                    "\n-- Deleting rows that exist in the database but not in the dump\n"
-                )
-                for tname, table_info in self.create_map.items():
-                    if "db_pks" in table_info and "dump_pks" in table_info:
-                        pks_to_delete = table_info["db_pks"] - table_info["dump_pks"]
-                        if pks_to_delete:
-                            pk_cols = table_info["pk"]
-                            self.summary["rows_deleted"] += len(pks_to_delete)
-                            for pk_tuple in pks_to_delete:
-                                where_clause = " AND ".join(
-                                    f"`{col}` = {self._format_sql_value(val)}"
-                                    for col, val in zip(pk_cols, pk_tuple)
-                                )
-                                fout.write(
-                                    f"DELETE FROM `{tname}` WHERE {where_clause};\n"
-                                )
+                    self._handle_create_statement(stmt, fout)
+                elif stype == "insert":
+                    self._handle_insert_statement(stmt, fout)
+
+            self._generate_delete_statements(fout)
+
+    def run(self):
+        self.connect_db()
+        fin = open_maybe_compressed(self.args["inpath"], "rt")
+        fout = open(self.args["outpath"], "w", encoding="utf-8")
+
+        self._process_statements(fin, fout)
+
         if self.cursor:
             self.cursor.close()
         if self.connection and self.connection.is_connected():
             self.connection.close()
         if self.progress:
             self.progress.close()
-        self.display_info()
 
-    def display_info(self):
-        print(tl("Done. Diff saved to: {path}").format(path=self.args["outpath"]))
-        print("\n" + tl("--- Diff Summary ---"))
-        if not self.args.get("insert_only"):
-            print(
-                tl("Tables to create: {count}").format(
-                    count=self.summary["tables_created"]
-                )
-            )
-            print(
-                tl("Tables to alter: {count}").format(
-                    count=self.summary["tables_altered"]
-                )
-            )
-        if self.args.get("diff_data"):
-            print(
-                tl("Rows to insert: {count}").format(count=self.summary["rows_inserted"])
-            )
-            if not self.args.get("insert_only"):
-                print(
-                    tl("Rows to update: {count}").format(
-                        count=self.summary["rows_updated"]
-                    )
-                )
-                print(
-                    tl("Rows to delete: {count}").format(
-                        count=self.summary["rows_deleted"]
-                    )
-                )
-        print("--------------------\n")
+        self.summary.display(self.args["outpath"])
+
+    # --- Helper Methods ---
 
     def _parse_single_tuple_to_fields(self, tuple_str: str) -> list[str | None]:
         parser = SqlTupleFieldParser(tuple_str)
