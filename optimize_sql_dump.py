@@ -1,9 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-
 """
 SQL Dump Optimizer (MySQL / Postgres)
 - Detects compression by magic number (gzip, bzip2, xz, zip, none).

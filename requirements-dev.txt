@@ -1,0 +1,22 @@
+# Include production dependencies
+-r requirements.txt
+
+# Testing
+allure-pytest==2.15.0
+coverage==7.10.6
+pytest==8.4.2
+pytest-bdd==8.1.0
+pytest-cov==7.0.0
+pytest-instafail==0.5.0
+pytest-timeout==2.4.0
+pytest-xdist==3.8.0
+
+# Linting
+flake8==7.1.0
+
+# Dependencies of testing/linting tools
+allure-python-commons==2.15.0
+execnet==2.1.1
+gherkin-official==29.0.0
+iniconfig==2.1.0
+pluggy==1.6.0

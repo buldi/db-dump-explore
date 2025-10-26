@@ -49,12 +49,12 @@ msgstr "[INFO] Utworzono plik {fname}"
 #: optimize_sql_dump.py:794
 #, python-brace-format
 msgid "Processing table: {tname}"
-msgstr ""
+msgstr "Przetwarzanie tabeli: {tname}"
 
 #: optimize_sql_dump.py:812 optimize_sql_dump.py:840
 #, python-brace-format
 msgid "[WARN] Failed to parse VALUES in INSERT for table {tname}: {error}"
-msgstr ""
+msgstr "[OSTRZEŻENIE] Nie udało się przetworzyć VALUES w INSERT dla tabeli {tname}: {error}"
 
 #: optimize_sql_dump.py:886
 msgid "-- Optimized by SqlDumpOptimizer\n"
@@ -92,16 +92,16 @@ msgstr "Gotowe. Wygenerowano pliki tylko z danymi w katalogu: {path}"
 
 #: optimize_sql_dump.py:983
 msgid "Analyzing dump"
-msgstr ""
+msgstr "Analizowanie zrzutu"
 
 #: optimize_sql_dump.py:1016
 msgid "--- Dump Analysis Summary ---"
-msgstr ""
+msgstr "--- Podsumowanie analizy zrzutu ---"
 
 #: optimize_sql_dump.py:1025
 #, python-brace-format
 msgid "Found {num_tables} tables with a total of {total_rows} rows."
-msgstr ""
+msgstr "Znaleziono {num_tables} tabel z łączną liczbą {total_rows} wierszy."
 
 #: optimize_sql_dump.py:1078
 msgid "Parsing dump for diff"
@@ -125,7 +125,7 @@ msgstr "[INFO] Pobrano {count} kluczy głównych dla tabeli `{tname}`."
 #: optimize_sql_dump.py:1251
 #, python-brace-format
 msgid "Diffing schema for {tname}"
-msgstr ""
+msgstr "Porównywanie schematu dla {tname}"
 
 #: optimize_sql_dump.py:1288
 #, python-brace-format
@@ -137,11 +137,11 @@ msgstr ""
 #: optimize_sql_dump.py:1296
 #, python-brace-format
 msgid "Diffing data for {tname}"
-msgstr ""
+msgstr "Porównywanie danych dla {tname}"
 
 #: optimize_sql_dump.py:1329
 msgid "Generating DELETE statements"
-msgstr ""
+msgstr "Generowanie instrukcji DELETE"
 
 #: optimize_sql_dump.py:1357
 #, python-brace-format
@@ -150,32 +150,32 @@ msgstr "Gotowe. Różnice zapisano do: {path}"
 
 #: optimize_sql_dump.py:1358
 msgid "--- Diff Summary ---"
-msgstr ""
+msgstr "--- Podsumowanie różnic ---"
 
 #: optimize_sql_dump.py:1361
 #, python-brace-format
 msgid "Tables to create: {count}"
-msgstr ""
+msgstr "Tabele do utworzenia: {count}"
 
 #: optimize_sql_dump.py:1366
 #, python-brace-format
 msgid "Tables to alter: {count}"
-msgstr ""
+msgstr "Tabele do zmiany: {count}"
 
 #: optimize_sql_dump.py:1372
 #, python-brace-format
 msgid "Rows to insert: {count}"
-msgstr ""
+msgstr "Wiersze do wstawienia: {count}"
 
 #: optimize_sql_dump.py:1376
 #, python-brace-format
 msgid "Rows to update: {count}"
-msgstr ""
+msgstr "Wiersze do zaktualizowania: {count}"
 
 #: optimize_sql_dump.py:1381
 #, python-brace-format
 msgid "Rows to delete: {count}"
-msgstr ""
+msgstr "Wiersze do usunięcia: {count}"
 
 #: optimize_sql_dump.py:1482
 msgid "Optional form: <input_file> <output_file>"
@@ -252,7 +252,7 @@ msgstr ""
 msgid ""
 "Analyze the dump file and print a summary of its contents (tables, rows) "
 "without writing any files."
-msgstr ""
+msgstr "Analizuje plik zrzutu i wyświetla podsumowanie jego zawartości (tabele, wiersze) bez zapisywania żadnych plików."
 
 #: optimize_sql_dump.py:1555
 msgid "Database Diffing (Experimental)"
@@ -304,7 +304,7 @@ msgstr "Nie znaleziono pliku: {path}"
 #, python-brace-format
 msgid ""
 "[INFO] Output filename does not end with .sql, appending it. New name: {name}"
-msgstr ""
+msgstr "[INFO] Nazwa pliku wyjściowego nie kończy się na .sql, dodaję rozszerzenie. Nowa nazwa: {name}"
 
 #: optimize_sql_dump.py:1620
 #, fuzzy
