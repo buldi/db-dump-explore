@@ -384,12 +384,17 @@ def test_escape_sql_value(input_val, expected):
 class TestDatabaseDiffer:
     @pytest.fixture
     def differ(self, tmp_path):
-        """Provides a DatabaseDiffer instance for testing."""
+        """Provides a MySQLDatabaseDiffer instance for testing."""
         # The differ's __init__ expects 'inpath' for progress setup.
         # We provide a dummy path to satisfy this requirement.
         dummy_inpath = tmp_path / "dummy.sql"
         dummy_inpath.touch()
-        return opt.DatabaseDiffer(inpath=str(dummy_inpath), verbose=False)
+        # We need to patch mysql.connector if it's not installed for the handler
+        if "mysql" not in sys.modules:
+            sys.modules["mysql"] = MagicMock()
+            sys.modules["mysql.connector"] = MagicMock()
+
+        return opt.MySQLDatabaseDiffer(inpath=str(dummy_inpath), verbose=False)
 
     @pytest.mark.parametrize(
         "input_val, expected_sql", [
@@ -408,41 +413,41 @@ class TestDatabaseDiffer:
     def test_format_sql_value(self, differ, input_val, expected_sql):
         assert differ._format_sql_value(input_val) == expected_sql
 
-    # def test_compare_schemas_add_column(self, differ):
-    #     dump_cols = {
-    #         "id": "`id` int NOT NULL",
-    #         "name": "`name` varchar(255) NULL",
-    #         "email": "`email` varchar(255) NOT NULL",
-    #     }
-    #     db_cols = {
-    #         "id": {"COLUMN_NAME": "id", "COLUMN_TYPE": "int"},
-    #         "name": {"COLUMN_NAME": "name", "COLUMN_TYPE": "varchar(255)"},
-    #     }
-    #     statements = differ.compare_schemas(dump_cols, db_cols, "users")
-    #     assert len(statements) == 1
-    #     assert "ADD COLUMN `email` varchar(255) NOT NULL" in statements[0]
-    #     assert "AFTER `name`" in statements[0]
+    def test_compare_schemas_add_column(self, differ):
+        dump_cols = {
+            "id": "`id` int NOT NULL",
+            "name": "`name` varchar(255) NULL",
+            "email": "`email` varchar(255) NOT NULL",
+        }
+        db_cols = {
+            "id": {"COLUMN_NAME": "id", "COLUMN_TYPE": "int"},
+            "name": {"COLUMN_NAME": "name", "COLUMN_TYPE": "varchar(255)"},
+        }
+        statements = differ.compare_schemas(dump_cols, db_cols, "users")
+        assert len(statements) == 1
+        assert "ADD COLUMN `email` varchar(255) NOT NULL" in statements[0]
+        assert "AFTER `name`" in statements[0]
 
-    # def test_compare_schemas_modify_column(self, differ):
-    #     dump_cols = {
-    #         "id": "`id` int NOT NULL",
-    #         "name": "`name` text NULL",
-    #     }
-    #     db_cols = {
-    #         "id": {"COLUMN_NAME": "id", "COLUMN_TYPE": "int"},
-    #         "name": {
-    #             "COLUMN_NAME": "name",
-    #             "COLUMN_TYPE": "varchar(255)",
-    #             "IS_NULLABLE": "YES",
-    #             "COLUMN_DEFAULT": None,
-    #             "EXTRA": "",
-    #             "CHARACTER_SET_NAME": "utf8mb4",
-    #             "COLLATION_NAME": "utf8mb4_unicode_ci",
-    #         },
-    #     }
-    #     statements = differ.compare_schemas(dump_cols, db_cols, "users")
-    #     assert len(statements) == 1
-    #     assert "MODIFY COLUMN `name` text NULL" in statements[0]
+    def test_compare_schemas_modify_column(self, differ):
+        dump_cols = {
+            "id": "`id` int NOT NULL",
+            "name": "`name` text NULL",
+        }
+        db_cols = {
+            "id": {"COLUMN_NAME": "id", "COLUMN_TYPE": "int"},
+            "name": {
+                "COLUMN_NAME": "name",
+                "COLUMN_TYPE": "varchar(255)",
+                "IS_NULLABLE": "YES",
+                "COLUMN_DEFAULT": None,
+                "EXTRA": "",
+                "CHARACTER_SET_NAME": "utf8mb4",
+                "COLLATION_NAME": "utf8mb4_unicode_ci",
+            },
+        }
+        statements = differ.compare_schemas(dump_cols, db_cols, "users")
+        assert len(statements) == 1
+        assert "MODIFY COLUMN `name` text NULL" in statements[0]
 
     def test_compare_schemas_no_change(self, differ):
         dump_cols = {"id": "`id` int NOT NULL"}
@@ -460,13 +465,13 @@ class TestDatabaseDiffer:
         statements = differ.compare_schemas(dump_cols, db_cols, "users")
         assert len(statements) == 0
 
-    # def test_compare_data_row_update(self, differ):
-    #     dump_row = {"id": 1, "name": "new_name", "email": "test@test.com"}
-    #     db_row = {"id": 1, "name": "old_name", "email": "test@test.com"}
-    #     pk_cols = ["id"]
-    #     update_stmt = differ.compare_data_row(dump_row, db_row, "users", pk_cols)
-    #     assert update_stmt is not None
-    #     assert "UPDATE `users` SET `name` = 'new_name' WHERE `id` = 1;" in update_stmt
+    def test_compare_data_row_update(self, differ):
+        dump_row = {"id": 1, "name": "new_name", "email": "test@test.com"}
+        db_row = {"id": 1, "name": "old_name", "email": "test@test.com"}
+        pk_cols = ["id"]
+        update_stmt = differ.compare_data_row(dump_row, db_row, "users", pk_cols)
+        assert update_stmt is not None
+        assert "UPDATE `users` SET `name` = 'new_name' WHERE `id` = 1;" in update_stmt
 
     def test_compare_data_row_no_change(self, differ):
         dump_row = {"id": 1, "name": "same_name"}
@@ -475,53 +480,183 @@ class TestDatabaseDiffer:
         update_stmt = differ.compare_data_row(dump_row, db_row, "users", pk_cols)
         assert update_stmt is None
 
-    # def test_run_generates_delete(self, tmp_path):
-    #     """
-    #     Integration-like test for the DELETE generation logic in `run`.
-    #     """
-    #     in_file = tmp_path / "dump.sql"
-    #     out_file = tmp_path / "diff.sql"
-    #     in_file.write_text(
-    #         "CREATE TABLE `users` (`id` int, PRIMARY KEY (`id`));\n"
-    #         "INSERT INTO `users` VALUES (1);"
-    #     )
+    @pytest.mark.parametrize(
+        "col_name, db_col_info, expected_def",
+        [
+            (
+                "id",
+                {
+                    "COLUMN_TYPE": "int",
+                    "IS_NULLABLE": "NO",
+                    "COLUMN_DEFAULT": None,
+                    "EXTRA": "auto_increment",
+                    "CHARACTER_SET_NAME": None,
+                    "COLLATION_NAME": None,
+                },
+                "`id` int not null auto_increment",
+            ),
+            (
+                "name",
+                {
+                    "COLUMN_TYPE": "varchar(255)",
+                    "IS_NULLABLE": "YES",
+                    "COLUMN_DEFAULT": None,
+                    "EXTRA": "",
+                    "CHARACTER_SET_NAME": "utf8mb4",
+                    "COLLATION_NAME": "utf8mb4_unicode_ci",
+                },
+                "`name` varchar(255) character set utf8mb4 collate utf8mb4_unicode_ci null default null",
+            ),
+            (
+                "status",
+                {
+                    "COLUMN_TYPE": "enum('active','inactive')",
+                    "IS_NULLABLE": "NO",
+                    "COLUMN_DEFAULT": "active",
+                    "EXTRA": "",
+                    "CHARACTER_SET_NAME": "latin1",
+                    "COLLATION_NAME": "latin1_swedish_ci",
+                },
+                "`status` enum('active','inactive') character set latin1 collate latin1_swedish_ci not null default 'active'",
+            ),
+            (
+                "created_at",
+                {
+                    "COLUMN_TYPE": "timestamp",
+                    "IS_NULLABLE": "NO",
+                    "COLUMN_DEFAULT": "CURRENT_TIMESTAMP",
+                    "EXTRA": "on update CURRENT_TIMESTAMP",
+                    "CHARACTER_SET_NAME": None,
+                    "COLLATION_NAME": None,
+                },
+                "`created_at` timestamp not null default current_timestamp on update current_timestamp",
+            ),
+        ],
+    )
+    def test_build_db_column_definition(self, differ, col_name, db_col_info, expected_def):
+        """Tests the reconstruction of column definitions from database metadata."""
+        result = differ._build_db_column_definition(col_name, db_col_info)
+        assert result == expected_def
 
-    #     args = {
-    #         "inpath": str(in_file),
-    #         "outpath": str(out_file),
-    #         "db_name": "testdb",
-    #         "diff_data": True,
-    #         "insert_only": False,
-    #         "verbose": False,
-    #     }
+    @pytest.mark.parametrize(
+        "dump_row, db_row, pk_cols, expected_fragment",
+        [
+            # Test 1: Multiple columns changed
+            (
+                {"id": 1, "name": "new_name", "email": "new@email.com"},
+                {"id": 1, "name": "old_name", "email": "old@email.com"},
+                ["id"],
+                "SET `name` = 'new_name', `email` = 'new@email.com' WHERE `id` = 1",
+            ),
+            # Test 2: Value changes to NULL
+            (
+                {"id": 2, "notes": None},
+                {"id": 2, "notes": "some notes"},
+                ["id"],
+                "SET `notes` = NULL WHERE `id` = 2",
+            ),
+            # Test 3: Value changes from NULL
+            (
+                {"id": 3, "notes": "new notes"},
+                {"id": 3, "notes": None},
+                ["id"],
+                "SET `notes` = 'new notes' WHERE `id` = 3",
+            ),
+            # Test 4: Numeric vs String representation (should not trigger update)
+            (
+                {"id": 4, "value": 123},
+                {"id": 4, "value": "123"},
+                ["id"],
+                None,  # No update expected as str(123) == "123"
+            ),
+            # Test 5: Float value change
+            (
+                {"id": 5, "price": 99.99},
+                {"id": 5, "price": 99.9},
+                ["id"],
+                "SET `price` = 99.99 WHERE `id` = 5",
+            ),
+            # Test 6: Composite primary key
+            (
+                {"user_id": 10, "post_id": 20, "comment": "updated comment"},
+                {"user_id": 10, "post_id": 20, "comment": "original comment"},
+                ["user_id", "post_id"],
+                "SET `comment` = 'updated comment' WHERE `user_id` = 10 AND `post_id` = 20",
+            ),
+            # Test 7: DB returns bytes, dump has string (should not trigger update)
+            (
+                {"id": 7, "data": "some_text"},
+                {"id": 7, "data": b"some_text"},
+                ["id"],
+                None,  # No update expected due to bytes decoding
+            ),
+            # Test 8: DB returns bytes, dump has different string (should trigger update)
+            (
+                {"id": 8, "data": "new_text"},
+                {"id": 8, "data": b"old_text"},
+                ["id"],
+                "SET `data` = 'new_text' WHERE `id` = 8",
+            ),
+        ],
+    )
+    def test_compare_data_row_edge_cases(
+        self, differ, dump_row, db_row, pk_cols, expected_fragment
+    ):
+        """Tests various edge cases for data row comparison."""
+        update_stmt = differ.compare_data_row(dump_row, db_row, "users", pk_cols)
+        if expected_fragment:
+            assert update_stmt is not None
+            assert expected_fragment in update_stmt
+        else:
+            assert update_stmt is None
 
-    #     # We need to patch mysql.connector if it's not installed
-    #     if "mysql" not in sys.modules:
-    #         sys.modules["mysql"] = MagicMock()
-    #         sys.modules["mysql.connector"] = MagicMock()
+    def test_run_generates_delete(self, tmp_path):
+        """
+        Integration-like test for the DELETE generation logic in `run`.
+        """
+        in_file = tmp_path / "dump.sql"
+        out_file = tmp_path / "diff.sql"
+        in_file.write_text(
+            "CREATE TABLE `users` (`id` int, PRIMARY KEY (`id`));\n"
+            "INSERT INTO `users` VALUES (1);"
+        )
 
-    #     differ = opt.DatabaseDiffer(**args)
+        args = {
+            "inpath": str(in_file),
+            "outpath": str(out_file),
+            "db_name": "testdb",
+            "diff_data": True,
+            "insert_only": False,
+            "verbose": False,
+        }
 
-    #     # Mock database interactions
-    #     differ.connect_db = MagicMock()
-    #     differ.get_db_schema = MagicMock(return_value={"id": {}})  # Table exists
-    #     # DB has PKs (1,) and (2,). Dump only has (1,). So (2,) should be deleted.
-    #     differ.get_db_primary_keys = MagicMock(return_value={('1',), ('2',)})
-    #     differ.get_db_row_by_pk = MagicMock(return_value={"id": 1})
+        # We need to patch mysql.connector if it's not installed
+        if "mysql" not in sys.modules:
+            sys.modules["mysql"] = MagicMock()
+            sys.modules["mysql.connector"] = MagicMock()
 
-    #     differ.run()
+        differ = opt.MySQLDatabaseDiffer(**args)
 
-    #     output = out_file.read_text()
+        # Mock database interactions
+        differ.connect_db = MagicMock()
+        differ.get_db_schema = MagicMock(return_value={"id": {}})  # Table exists
+        # DB has PKs (1,) and (2,). Dump only has (1,). So (2,) should be deleted.
+        differ.get_db_primary_keys = MagicMock(return_value={('1',), ('2',)})
+        differ.get_db_row_by_pk = MagicMock(return_value={"id": 1})
 
-    #     assert "-- Deleting rows" in output
-    #     assert "DELETE FROM `users` WHERE `id` = '2';" in output
-    #     assert "DELETE FROM `users` WHERE `id` = '1';" not in output
+        differ.run()
+
+        output = out_file.read_text()
+
+        assert "-- Deleting rows" in output
+        assert "DELETE FROM `users` WHERE `id` = '2';" in output
+        assert "DELETE FROM `users` WHERE `id` = '1';" not in output
 
 
 class TestDumpWriter:
     @pytest.fixture
     def mock_handler(self):
-        handler = MagicMock(spec=opt.DatabaseHandler)
+        handler = MagicMock(spec=opt.MySQLHandler)
         handler.normalize_table_name.side_effect = lambda x: x.strip('`')
         handler.insert_template = "INSERT INTO {table} {cols} VALUES\n{values};\n"
         handler.get_truncate_statement.side_effect = lambda t: f"TRUNCATE TABLE `{t}`;\n"
@@ -529,95 +664,108 @@ class TestDumpWriter:
         handler.get_load_statement.return_value = "LOAD DATA MOCK"
         return handler
 
-    # def test_setup_normal_mode(self, mock_handler, tmp_path):
-    #     out_file = tmp_path / "out.sql"
-    #     args = {"outpath": str(out_file), "inpath": "dummy.sql", "dry_run": False}
-    #     writer = opt.DumpWriter(mock_handler, **args)
-    #     writer.setup()
-    #     writer.finalize({})
+    def test_setup_normal_mode(self, mock_handler, tmp_path):
+        out_file = tmp_path / "out.sql"
+        args = {"outpath": str(out_file), "inpath": "dummy.sql", "dry_run": False}
+        with opt.DumpWriter(mock_handler, **args) as writer:
+            assert writer.fout is not None
+            assert not writer.fout.closed
 
-    #     assert out_file.exists()
-    #     content = out_file.read_text()
-    #     assert "-- Optimized by SqlDumpOptimizer" in content
+        assert out_file.exists()
+        content = out_file.read_text()
+        assert "-- Optimized by SqlDumpOptimizer" in content
 
-    # def test_setup_dry_run(self, mock_handler):
-    #     args = {"outpath": "out.sql", "inpath": "dummy.sql", "dry_run": True}
-    #     writer = opt.DumpWriter(mock_handler, **args)
-    #     writer.setup()
-    #     assert writer.fout.name == os.devnull
+    def test_setup_dry_run(self, mock_handler):
+        import os
+        args = {"outpath": "out.sql", "inpath": "dummy.sql", "dry_run": True}
+        with opt.DumpWriter(mock_handler, **args) as writer:
+            assert writer.fout.name == os.devnull
 
-    # def test_split_mode_file_creation(self, mock_handler, tmp_path):
-    #     split_dir = tmp_path / "split"
-    #     args = {"split_dir": str(split_dir), "inpath": "dummy.sql"}
-    #     writer = opt.DumpWriter(mock_handler, **args)
-    #     writer.setup()
+    def test_split_mode_file_creation(self, mock_handler, tmp_path):
+        split_dir = tmp_path / "split"
+        args = {"split_dir": str(split_dir), "inpath": "dummy.sql", "dry_run": False}
+        with opt.DumpWriter(mock_handler, **args) as writer:
+            writer.get_writer_for_table("t1")
 
-    #     writer.get_writer_for_table("t1")
-    #     writer.finalize({})
+        assert (split_dir / "t1.sql").exists()
 
-    #     assert (split_dir / "t1.sql").exists()
+    def test_load_data_mode_file_creation(self, mock_handler, tmp_path):
+        load_dir = tmp_path / "load_data"
+        args = {"load_data_dir": str(load_dir), "inpath": "dummy.sql"}
+        with opt.DumpWriter(mock_handler, **args) as writer:
+            writer.get_writer_for_table("t1")
+            writer.finalize({"t1": "CREATE TABLE..."})
+        assert (load_dir / "t1.sql").exists()
+        assert (load_dir / "t1.tsv").exists()
 
-    # def test_load_data_mode_file_creation(self, mock_handler, tmp_path):
-    #     load_dir = tmp_path / "load_data"
-    #     args = {"load_data_dir": str(load_dir), "inpath": "dummy.sql"}
-    #     writer = opt.DumpWriter(mock_handler, **args)
-    #     writer.setup()
+        sql_content = (load_dir / "t1.sql").read_text()
+        assert "LOAD DATA MOCK" in sql_content
 
-    #     writer.get_writer_for_table("t1")
-    #     writer.finalize({"t1": "CREATE TABLE..."})
+    def test_insert_only_mode(self, mock_handler, tmp_path):
+        """Tests that --insert-only mode creates files with TRUNCATE but without CREATE."""
+        insert_dir = tmp_path / "insert_only"
+        in_file = tmp_path / "dummy.sql"
+        in_file.write_text("CREATE TABLE `t1` (id int);\nINSERT INTO `t1` VALUES (1);")
 
-    #     assert (load_dir / "t1.sql").exists()
-    #     assert (load_dir / "t1.tsv").exists()
+        args = {
+            "insert_only": str(insert_dir),
+            "inpath": str(in_file),
+            "verbose": False,
+            "db_type": "mysql",
+            "outpath": None
+        }
 
-    #     sql_content = (load_dir / "t1.sql").read_text()
-    #     assert "LOAD DATA MOCK" in sql_content
+        optimizer = opt.DumpOptimizer(**args)
+        optimizer.run()
 
-    # def test_insert_only_mode(self, mock_handler, tmp_path):
-    #     insert_dir = tmp_path / "insert_only"
-    #     args = {"insert_only": str(insert_dir), "inpath": "dummy.sql"}
-    #     writer = opt.DumpWriter(mock_handler, **args)
-    #     writer.setup()
+        t1_file = insert_dir / "t1.sql"
+        assert t1_file.exists()
+        content = t1_file.read_text()
+        assert content.startswith("TRUNCATE TABLE `t1`;")
+        assert "CREATE TABLE" not in content, "CREATE statements should not be written in insert_only mode"
+        assert "INSERT INTO" in content
 
-    #     writer.write_create_statement("t1", "CREATE TABLE `t1` (id int);")
-    #     writer.finalize({})
+    def test_insert_buffering_and_flushing(self, mock_handler, tmp_path):
+        out_file = tmp_path / "out.sql"
+        args = {"outpath": str(out_file), "inpath": "dummy.sql", "batch_size": 2}
+        with opt.DumpWriter(mock_handler, **args) as writer:
+            writer.add_insert_tuples("t1", "(`id`)", ["(1)", "(2)"])
+            # Buffer should be flushed here as batch_size is reached
+            assert "t1" not in writer.insert_buffers or not writer.insert_buffers["t1"]["tuples"]
 
-    #     t1_file = insert_dir / "t1.sql"
-    #     assert t1_file.exists()
-    #     content = t1_file.read_text()
-    #     assert "TRUNCATE TABLE `t1`;" in content
-    #     # CREATE statement should not be written in insert_only mode
-    #     assert "CREATE TABLE" not in content
+            writer.add_insert_tuples("t1", "(`id`)", ["(3)"])
+            # Buffer should not be flushed yet
+            assert len(writer.insert_buffers["t1"]["tuples"]) == 1
 
-    # def test_insert_buffering_and_flushing(self, mock_handler, tmp_path):
-    #     out_file = tmp_path / "out.sql"
-    #     args = {"outpath": str(out_file), "inpath": "dummy.sql", "batch_size": 2}
-    #     writer = opt.DumpWriter(mock_handler, **args)
-    #     writer.setup()
+            writer.finalize({})
 
-    #     writer.add_insert_tuples("t1", "(`id`)", ["(1)", "(2)"])
-    #     # Buffer should be flushed here as batch_size is reached
-    #     assert "t1" not in writer.insert_buffers or not writer.insert_buffers["t1"]["tuples"]
+        content = out_file.read_text()
+        assert "INSERT INTO t1 (`id`) VALUES\n(1),\n(2);\n" in content
+        assert "INSERT INTO t1 (`id`) VALUES\n(3);\n" in content
 
-    #     writer.add_insert_tuples("t1", "(`id`)", ["(3)"])
-    #     # Buffer should not be flushed yet
-    #     assert len(writer.insert_buffers["t1"]["tuples"]) == 1
+    def test_tsv_buffering_and_flushing(self, tmp_path):
+        """Tests TSV buffering and flushing logic within DumpOptimizer."""
+        load_dir = tmp_path / "load_data"
+        in_file = tmp_path / "in.sql"
+        in_file.write_text("""
+        CREATE TABLE `t1` (`id` int, `name` varchar(10));
+        INSERT INTO `t1` VALUES (1, 'a'), (2, 'b');
+        INSERT INTO `t1` VALUES (3, 'c');
+        """)
 
-    #     writer.finalize({})
+        args = {
+            "load_data_dir": str(load_dir),
+            "inpath": str(in_file),
+            "tsv_buffer_size": 2,
+            "verbose": False,
+            "db_type": "mysql"
+        }
 
-    #     content = out_file.read_text()
-    #     assert "INSERT INTO t1 (`id`) VALUES\n(1),\n(2);\n" in content
-    #     assert "INSERT INTO t1 (`id`) VALUES\n(3);\n" in content
+        optimizer = opt.DumpOptimizer(**args)
+        optimizer.run()
 
-    # def test_tsv_buffering_and_flushing(self, mock_handler, tmp_path):
-    #     load_dir = tmp_path / "load_data"
-    #     args = {"load_data_dir": str(load_dir), "inpath": "dummy.sql", "tsv_buffer_size": 2}
-    #     writer = opt.DumpWriter(mock_handler, **args)
-    #     writer.setup()
-    #     writer.get_writer_for_table("t1")
+        tsv_file = load_dir / "t1.tsv"
+        assert tsv_file.exists()
 
-    #     writer.add_tsv_rows("t1", ["1\ta", "2\tb"]) # Should flush
-    #     writer.add_tsv_rows("t1", ["3\tc"]) # Should not flush
-    #     writer.finalize({"t1": "CREATE..."})
-
-    #     tsv_content = (load_dir / "t1.tsv").read_text()
-    #     assert tsv_content == "1\ta\n2\tb\n3\tc\n"
+        tsv_content = tsv_file.read_text()
+        assert tsv_content == "1\ta\n2\tb\n3\tc\n"
