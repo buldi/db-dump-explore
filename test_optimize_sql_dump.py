@@ -653,6 +653,56 @@ class TestDatabaseDiffer:
         assert "DELETE FROM `users` WHERE `id` = '1';" not in output
 
 
+def test_handle_insert_uses_temp_table(tmp_path):
+    """Ensure that when memory limit is exceeded, PKs are stored via temp-table helper."""
+    in_file = tmp_path / "dump.sql"
+    out_file = tmp_path / "diff.sql"
+    in_file.write_text(
+        "CREATE TABLE `users` (`id` int, PRIMARY KEY (`id`));\n"
+        "INSERT INTO `users` VALUES (3);"
+    )
+
+    args = {
+        "inpath": str(in_file),
+        "outpath": str(out_file),
+        "db_name": "testdb",
+        "diff_data": True,
+        "insert_only": False,
+        "verbose": False,
+    }
+
+    # Ensure mysql module exists for the differ
+    if "mysql" not in sys.modules:
+        sys.modules["mysql"] = MagicMock()
+        sys.modules["mysql.connector"] = MagicMock()
+
+    differ = opt.MySQLDatabaseDiffer(**args)
+
+    # Patch DB interactions to avoid real DB calls
+    differ.connect_db = MagicMock()
+    differ.get_db_schema = MagicMock(return_value={"id": {}})
+    # Simulate that fetching DB PKs would return something small
+    differ.get_db_primary_keys = MagicMock(return_value={('1',)})
+
+    # Force memory limit to zero so the code chooses temp-table path
+    differ.memory_limit = 0
+
+    # Replace temp-table helpers so they don't touch a real DB
+    def fake_create_tmp(tname, pk_cols):
+        differ.memory_usage.setdefault(tname, {"pk_count": 0, "using_temp_table": False})
+        differ.memory_usage[tname]["using_temp_table"] = True
+
+    differ._create_temp_table_for_pks = MagicMock(side_effect=fake_create_tmp)
+    differ._ensure_temp_table_for_pks = MagicMock()
+    differ._store_pks_in_temp_table = MagicMock()
+
+    # Run differ -- should call our temp-table helpers instead of executing SQL
+    differ.run()
+
+    assert differ._create_temp_table_for_pks.called
+    assert differ._store_pks_in_temp_table.called
+
+
 class TestDumpWriter:
     @pytest.fixture
     def mock_handler(self):
