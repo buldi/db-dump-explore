@@ -6,14 +6,14 @@ import zipfile
 from unittest.mock import MagicMock, patch
 
 import pytest
+
 import optimize_sql_dump as opt
 
 # Helper to get the main function for CLI tests
-from optimize_sql_dump import main as cli_main
-
 from optimize_sql_dump import (
     escape_sql_value,
 )  # Assuming the function is in this module
+from optimize_sql_dump import main as cli_main
 
 
 @pytest.fixture
@@ -108,9 +108,7 @@ class TestPostgresHandler:
         tsv_path = "/path/to/my_table.tsv"
         stmt = postgres_handler.get_load_statement("my_table", tsv_path, cols_str)
         expected_stmt = "COPY \"my_table\" (\"id\", \"name\") FROM '/path/to/my_table.tsv' WITH (FORMAT csv, DELIMITER E'\\t', NULL '\\n');\n"
-        assert (
-            stmt == expected_stmt
-        )
+        assert stmt == expected_stmt
 
     def test_extract_columns_from_create_postgres(self, postgres_handler):
         create_stmt = """
@@ -131,7 +129,9 @@ class TestPostgresHandler:
 
     def test_detect_db_type_postgres_specific(self, tmp_path):
         dump_file = tmp_path / "pg_dump.sql"
-        dump_file.write_text("COPY public.users (id, name) FROM STDIN;\n1\tAlice\n\\.\n")
+        dump_file.write_text(
+            "COPY public.users (id, name) FROM STDIN;\n1\tAlice\n\\.\n"
+        )
         db_type = opt.detect_db_type(str(dump_file))
         assert db_type == "postgres"
 
@@ -325,7 +325,9 @@ def test_cli_load_data_mode(tmp_path):
     assert str(tsv_file) in sql_content
 
     tsv_content = tsv_file.read_text()  # noqa: E501
-    expected_tsv = "1\ttest@test.com\tsome notes\n2\t\\n\tother notes with a\ttab\n"  # noqa: E501
+    expected_tsv = (
+        "1\ttest@test.com\tsome notes\n2\t\\n\tother notes with a\ttab\n"  # noqa: E501
+    )
     assert tsv_content == expected_tsv
 
 
@@ -359,7 +361,8 @@ def test_cli_invalid_arguments(tmp_path, invalid_args):
 
 
 @pytest.mark.parametrize(
-    "input_val, expected", [
+    "input_val, expected",
+    [
         # Tests for strings
         ("tekst", "DEFAULT 'tekst'"),
         ("O'Reilly", "DEFAULT 'O''Reilly'"),
@@ -376,7 +379,8 @@ def test_cli_invalid_arguments(tmp_path, invalid_args):
         (False, "DEFAULT False"),
         # Test for None
         (None, "DEFAULT NULL"),
-    ])
+    ],
+)
 def test_escape_sql_value(input_val, expected):
     assert escape_sql_value(input_val, prefix_str="DEFAULT").strip() == expected
 
@@ -397,7 +401,8 @@ class TestDatabaseDiffer:
         return opt.MySQLDatabaseDiffer(inpath=str(dummy_inpath), verbose=False)
 
     @pytest.mark.parametrize(
-        "input_val, expected_sql", [
+        "input_val, expected_sql",
+        [
             (None, "NULL"),
             (123, "123"),
             (-45, "-45"),
@@ -409,7 +414,8 @@ class TestDatabaseDiffer:
             ('string with "quotes"', "'string with \"quotes\"'"),
             ("O'Reilly", "'O''Reilly'"),
             ("multiple 'quotes' here", "'multiple ''quotes'' here'"),
-        ])
+        ],
+    )
     def test_format_sql_value(self, differ, input_val, expected_sql):
         assert differ._format_sql_value(input_val) == expected_sql
 
@@ -533,7 +539,9 @@ class TestDatabaseDiffer:
             ),
         ],
     )
-    def test_build_db_column_definition(self, differ, col_name, db_col_info, expected_def):
+    def test_build_db_column_definition(
+        self, differ, col_name, db_col_info, expected_def
+    ):
         """Tests the reconstruction of column definitions from database metadata."""
         result = differ._build_db_column_definition(col_name, db_col_info)
         assert result == expected_def
@@ -641,7 +649,7 @@ class TestDatabaseDiffer:
         differ.connect_db = MagicMock()
         differ.get_db_schema = MagicMock(return_value={"id": {}})  # Table exists
         # DB has PKs (1,) and (2,). Dump only has (1,). So (2,) should be deleted.
-        differ.get_db_primary_keys = MagicMock(return_value={('1',), ('2',)})
+        differ.get_db_primary_keys = MagicMock(return_value={("1",), ("2",)})
         differ.get_db_row_by_pk = MagicMock(return_value={"id": 1})
 
         differ.run()
@@ -682,14 +690,16 @@ def test_handle_insert_uses_temp_table(tmp_path):
     differ.connect_db = MagicMock()
     differ.get_db_schema = MagicMock(return_value={"id": {}})
     # Simulate that fetching DB PKs would return something small
-    differ.get_db_primary_keys = MagicMock(return_value={('1',)})
+    differ.get_db_primary_keys = MagicMock(return_value={("1",)})
 
     # Force memory limit to zero so the code chooses temp-table path
     differ.memory_limit = 0
 
     # Replace temp-table helpers so they don't touch a real DB
     def fake_create_tmp(tname, pk_cols):
-        differ.memory_usage.setdefault(tname, {"pk_count": 0, "using_temp_table": False})
+        differ.memory_usage.setdefault(
+            tname, {"pk_count": 0, "using_temp_table": False}
+        )
         differ.memory_usage[tname]["using_temp_table"] = True
 
     differ._create_temp_table_for_pks = MagicMock(side_effect=fake_create_tmp)
@@ -707,9 +717,11 @@ class TestDumpWriter:
     @pytest.fixture
     def mock_handler(self):
         handler = MagicMock(spec=opt.MySQLHandler)
-        handler.normalize_table_name.side_effect = lambda x: x.strip('`')
+        handler.normalize_table_name.side_effect = lambda x: x.strip("`")
         handler.insert_template = "INSERT INTO {table} {cols} VALUES\n{values};\n"
-        handler.get_truncate_statement.side_effect = lambda t: f"TRUNCATE TABLE `{t}`;\n"
+        handler.get_truncate_statement.side_effect = (
+            lambda t: f"TRUNCATE TABLE `{t}`;\n"
+        )
         handler.extract_columns_from_create.return_value = "(`id`, `name`)"
         handler.get_load_statement.return_value = "LOAD DATA MOCK"
         return handler
@@ -727,6 +739,7 @@ class TestDumpWriter:
 
     def test_setup_dry_run(self, mock_handler):
         import os
+
         args = {"outpath": "out.sql", "inpath": "dummy.sql", "dry_run": True}
         with opt.DumpWriter(mock_handler, **args) as writer:
             assert writer.fout.name == os.devnull
@@ -762,7 +775,7 @@ class TestDumpWriter:
             "inpath": str(in_file),
             "verbose": False,
             "db_type": "mysql",
-            "outpath": None
+            "outpath": None,
         }
 
         optimizer = opt.DumpOptimizer(**args)
@@ -772,7 +785,9 @@ class TestDumpWriter:
         assert t1_file.exists()
         content = t1_file.read_text()
         assert content.startswith("TRUNCATE TABLE `t1`;")
-        assert "CREATE TABLE" not in content, "CREATE statements should not be written in insert_only mode"
+        assert (
+            "CREATE TABLE" not in content
+        ), "CREATE statements should not be written in insert_only mode"
         assert "INSERT INTO" in content
 
     def test_insert_buffering_and_flushing(self, mock_handler, tmp_path):
@@ -781,7 +796,10 @@ class TestDumpWriter:
         with opt.DumpWriter(mock_handler, **args) as writer:
             writer.add_insert_tuples("t1", "(`id`)", ["(1)", "(2)"])
             # Buffer should be flushed here as batch_size is reached
-            assert "t1" not in writer.insert_buffers or not writer.insert_buffers["t1"]["tuples"]
+            assert (
+                "t1" not in writer.insert_buffers
+                or not writer.insert_buffers["t1"]["tuples"]
+            )
 
             writer.add_insert_tuples("t1", "(`id`)", ["(3)"])
             # Buffer should not be flushed yet
@@ -797,18 +815,20 @@ class TestDumpWriter:
         """Tests TSV buffering and flushing logic within DumpOptimizer."""
         load_dir = tmp_path / "load_data"
         in_file = tmp_path / "in.sql"
-        in_file.write_text("""
+        in_file.write_text(
+            """
         CREATE TABLE `t1` (`id` int, `name` varchar(10));
         INSERT INTO `t1` VALUES (1, 'a'), (2, 'b');
         INSERT INTO `t1` VALUES (3, 'c');
-        """)
+        """
+        )
 
         args = {
             "load_data_dir": str(load_dir),
             "inpath": str(in_file),
             "tsv_buffer_size": 2,
             "verbose": False,
-            "db_type": "mysql"
+            "db_type": "mysql",
         }
 
         optimizer = opt.DumpOptimizer(**args)

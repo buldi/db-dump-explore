@@ -10,6 +10,7 @@ import io
 import locale
 import lzma
 import os
+
 # concurrent execution was attempted earlier but left incomplete; removed.
 import re
 import sys
@@ -34,7 +35,6 @@ try:
 except (locale.Error, IndexError):
     pass  # Keep default locale if setting fails
 import gettext
-
 import logging
 
 """
@@ -624,7 +624,13 @@ class StatementParser:
             self.in_backtick,
             self.is_escaped,
             self.paren_level,
-        ) = False, False, False, False, 0
+        ) = (
+            False,
+            False,
+            False,
+            False,
+            0,
+        )
         t = text.lstrip()[:30].upper()
         if t.startswith("CREATE TABLE") or t.startswith("CREATE TEMPORARY TABLE"):
             return "create", text
@@ -1693,7 +1699,8 @@ class BaseDatabaseDiffer(ABC):
             if isinstance(default, str) and default.upper() == "CURRENT_TIMESTAMP":
                 parts.append(f"default {default.lower()}")
             elif isinstance(default, str):
-                parts.append(f"default '{default.replace("'", "''")}'")
+                # Escape single quotes in string defaults
+                parts.append("default '" + default.replace("'", "''") + "'")
             else:
                 parts.append(f"default {default}")
         else:
