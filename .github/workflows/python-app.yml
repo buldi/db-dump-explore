@@ -1,20 +1,17 @@
-# This workflow will install Python dependencies, run tests and lint with a single version of Python
-# For more information see: https://docs.github.com/en/actions/automating-builds-and-tests/building-and-testing-python
-
 name: Python application
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
   pull_request:
-    branches: [ "main" ]
+    branches: ["main"]
 
 permissions:
   contents: read
 
 jobs:
   build:
-    runs-on: ${{ matrix.os }}   # self-hosted  # ubuntu-latest
+    runs-on: ${{ matrix.os }}
 
     strategy:
       matrix:
@@ -22,35 +19,60 @@ jobs:
         python-version: ["3.10", "3.11", "3.12"]
 
     steps:
-    - uses: actions/checkout@v4
-    - name: Set up Python ${{ matrix.python-version }}
-      id: setup-python
-      uses: actions/setup-python@v5
-      with:
-        python-version:  ${{ matrix.python-version }}
-    # - name: Cache pip packages
-    #   id: cache-pip
-    #   uses: actions/cache@v4
-    #   with:
-    #     path: ${{ steps.setup-python.outputs.python-packages-cache-dir }}
-    #     key: ${{ runner.os }}-pip-${{ matrix.python-version }}-${{ hashFiles('**/requirements-dev.txt') }}
-    #     restore-keys: |
-    #       ${{ runner.os }}-pip-${{ matrix.python-version }}
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-        # Ensure dev tools used in CI are available
-        python -m pip install ruff black isort pytest
+      - uses: actions/checkout@v4
 
-    - name: Lint with ruff
-      run: |
-        ruff check .
+      - name: Set up Python ${{ matrix.python-version }}
+        id: setup-python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: "pip"
 
-    - name: Format check (black)
-      run: |
-        black --check .
+      # ===============================
+      # INSTALL DEPENDENCIES: LINUX/MAC
+      # ===============================
+      - name: Install dependencies (Linux/macOS)
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          python -m pip install ruff black isort pytest coverage
 
-    - name: Test with pytest
-      run: |
-        pytest -q
+      # ===============================
+      # INSTALL DEPENDENCIES: WINDOWS
+      # ===============================
+      - name: Install dependencies (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          if (Test-Path "requirements.txt") { pip install -r requirements.txt }
+          python -m pip install ruff black isort pytest coverage
+
+      # ===== LINT =====
+      - name: Lint with ruff
+        run: ruff check .
+
+      # ===== BLACK FORMAT CHECK (z diff) =====
+      - name: Black format verification
+        run: |
+          black --check --diff .
+
+      # ===== ISORT CHECK =====
+      - name: Isort check
+        run: isort . --check-only --diff
+
+      # ===== TESTS + COVERAGE =====
+      - name: Run tests with coverage
+        run: |
+          coverage run -m pytest -q
+          coverage xml
+          coverage report -m
+
+      # ===== UPLOAD COVERAGE ARTIFACT =====
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-${{ matrix.os }}-${{ matrix.python-version }}
+          path: coverage.xml
