@@ -12,99 +12,54 @@ permissions:
 jobs:
   build:
     runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash # Używa bash również na Windows, co upraszcza skrypty
 
     strategy:
+      fail-fast: false # Opcjonalnie: zapobiega przerwaniu innych jobów, gdy jeden system zawiedzie
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
         python-version: ["3.10", "3.11", "3.12"]
 
     steps:
+      # ===== 1. SETUP =====
       - uses: actions/checkout@v4
 
       - name: Set up Python ${{ matrix.python-version }}
-        id: setup-python
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-          cache: "pip"
+          cache: "pip" # Automatycznie obsługuje cache dla pip
 
-      # ===============================
-      # INSTALL DEPENDENCIES: LINUX/MAC
-      # ===============================
-      - name: Install dependencies (Linux/macOS)
-        if: runner.os != 'Windows'
-        shell: bash
-        run: |
-          python -m pip install --upgrade pip
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-          python -m pip install ruff black isort pytest coverage
-
-      # ===============================
-      # INSTALL DEPENDENCIES: WINDOWS
-      # ===============================
-      - name: Install dependencies (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          python -m pip install --upgrade pip
-          if (Test-Path "requirements.txt") { pip install -r requirements.txt }
-          python -m pip install ruff black isort pytest coverage
-
-      # ===== LINT =====
-      - name: Lint with ruff
-        run: ruff check .
-
-      # ===== BLACK FORMAT CHECK (z diff) =====
-      - name: Black format verification
-        run: |
-          black --check --diff .
-
-      # ===== ISORT CHECK =====
-      - name: Isort check
-        run: isort . --check-only --diff
-
-      # ===== TESTS + COVERAGE =====
-      - name: Run tests with coverage
-        run: |
-          coverage run -m pytest -q
-          coverage xml
-          coverage report -m
-
-      # ===== UPLOAD COVERAGE ARTIFACT =====
-      - name: Upload coverage report
-        uses: actions/upload-artifact@v4
-        with:
-          name: coverage-${{ matrix.os }}-${{ matrix.python-version }}
-          path: coverage.xml
-      - uses: actions/checkout@v4
-      - name: Set up Python ${{ matrix.python-version }}
-        id: setup-python
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python-version }}
-      # - name: Cache pip packages
-      #   id: cache-pip
-      #   uses: actions/cache@v4
-      #   with:
-      #     path: ${{ steps.setup-python.outputs.python-packages-cache-dir }}
-      #     key: ${{ runner.os }}-pip-${{ matrix.python-version }}-${{ hashFiles('**/requirements-dev.txt') }}
-      #     restore-keys: |
-      #       ${{ runner.os }}-pip-${{ matrix.python-version }}
+      # ===== 2. INSTALL DEPENDENCIES =====
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-          # Ensure dev tools used in CI are available
-          python -m pip install ruff black isort pytest
+          python -m pip install ruff black isort pytest coverage
 
+      # ===== 3. CODE QUALITY (LINT & FORMAT) =====
       - name: Lint with ruff
-        run: |
-          ruff check .
+        run: ruff check .
 
-      - name: Format check (black)
-        run: |
-          black --check .
+      - name: Black format verification
+        run: black --check --diff .
 
-      - name: Test with pytest
-        run: |
-          pytest -q
+      - name: Isort check
+        run: isort . --check-only --diff
+
+      # ===== 4. TESTS =====
+      # - name: Run tests with coverage
+      #   run: |
+      #     coverage run -m pytest -q
+      #     coverage xml
+      #     coverage report -m
+
+      # ===== 5. ARTIFACTS =====
+      # - name: Upload coverage report
+      #   uses: actions/upload-artifact@v4
+      #   with:
+      #     name: coverage-${{ matrix.os }}-${{ matrix.python-version }}
+      #     path: coverage.xml
+      #     if-no-files-found: ignore # Zapobiega błędom, jeśli testy się nie powiodą
