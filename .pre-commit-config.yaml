@@ -1,0 +1,46 @@
+repos:
+  # ------------------------
+  # BLACK — formatting
+  # ------------------------
+  - repo: https://github.com/psf/black
+    rev: 23.12.1
+    hooks:
+      - id: black
+        language_version: python3
+
+  # ------------------------
+  # ISORT — importy
+  # ------------------------
+  - repo: https://github.com/pycqa/isort
+    rev: 5.13.2
+    hooks:
+      - id: isort
+
+  # ------------------------
+  # RUFF — lint + autofix
+  # ------------------------
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.4.3
+    hooks:
+      - id: ruff
+        args: ["--fix"]
+
+  # ------------------------
+  # MYPY — typing (opcjonalnie)
+  # ------------------------
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.9.0
+    hooks:
+      - id: mypy
+        additional_dependencies: []
+
+  # ------------------------
+  # PYTEST (pre-commit test)
+  # ------------------------
+  # - repo: local
+  #   hooks:
+  #     - id: pytest
+  #       name: Run pytest before commit
+  #       entry: pytest
+  #       language: system
+  #       pass_filenames: false

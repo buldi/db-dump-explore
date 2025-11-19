@@ -10,9 +10,7 @@ import pytest
 import optimize_sql_dump as opt
 
 # Helper to get the main function for CLI tests
-from optimize_sql_dump import (
-    escape_sql_value,
-)  # Assuming the function is in this module
+from optimize_sql_dump import escape_sql_value  # Assuming the function is in this module
 from optimize_sql_dump import main as cli_main
 
 
@@ -93,9 +91,7 @@ class TestPostgresTypeValidator:
 
 class TestPostgresHandler:
     def test_normalize_table_name_postgres(self, postgres_handler):
-        assert (
-            postgres_handler.normalize_table_name('"public"."my_table"') == "my_table"
-        )
+        assert postgres_handler.normalize_table_name('"public"."my_table"') == "my_table"
         assert postgres_handler.normalize_table_name("my_table") == "my_table"
         assert postgres_handler.normalize_table_name('"my_table"') == "my_table"
 
@@ -121,17 +117,12 @@ class TestPostgresHandler:
         """
         columns_str = postgres_handler.extract_columns_from_create(create_stmt)
         # Normalize returned string to a list of column names and compare as a set for robustness
-        cols = [  # noqa: E501
-            c.strip().strip('"')
-            for c in columns_str.strip().lstrip("(").rstrip(")").split(",")
-        ]
+        cols = [c.strip().strip('"') for c in columns_str.strip().lstrip("(").rstrip(")").split(",")]  # noqa: E501
         assert set(cols) == {"id", "name", "created_at"}
 
     def test_detect_db_type_postgres_specific(self, tmp_path):
         dump_file = tmp_path / "pg_dump.sql"
-        dump_file.write_text(
-            "COPY public.users (id, name) FROM STDIN;\n1\tAlice\n\\.\n"
-        )
+        dump_file.write_text("COPY public.users (id, name) FROM STDIN;\n1\tAlice\n\\.\n")
         db_type = opt.detect_db_type(str(dump_file))
         assert db_type == "postgres"
 
@@ -225,9 +216,7 @@ def test_dump_analyzer(tmp_path, capsys):
     # Simulate running from command line with --info
     test_args = ["optimize_sql_dump.py", "--input", str(dump_file), "--info"]
     with patch.object(sys, "argv", test_args):
-        with patch(
-            "optimize_sql_dump._load_config", return_value={}
-        ):  # Mock _load_config
+        with patch("optimize_sql_dump._load_config", return_value={}):  # Mock _load_config
             opt.main()
 
     captured = capsys.readouterr()
@@ -265,9 +254,7 @@ INSERT INTO `t2` VALUES ('a'),('b');"""
         str(split_dir),
     ]
     with patch.object(sys, "argv", test_args):
-        with patch(
-            "optimize_sql_dump._load_config", return_value={}
-        ):  # Mock _load_config
+        with patch("optimize_sql_dump._load_config", return_value={}):  # Mock _load_config
             cli_main()
 
     assert (split_dir / "t1.sql").exists()
@@ -308,9 +295,7 @@ def test_cli_load_data_mode(tmp_path):
         str(load_data_dir),
     ]
     with patch.object(sys, "argv", test_args):
-        with patch(
-            "optimize_sql_dump._load_config", return_value={}
-        ):  # Mock _load_config
+        with patch("optimize_sql_dump._load_config", return_value={}):  # Mock _load_config
             cli_main()
 
     sql_file = load_data_dir / "users.sql"
@@ -325,9 +310,7 @@ def test_cli_load_data_mode(tmp_path):
     assert str(tsv_file) in sql_content
 
     tsv_content = tsv_file.read_text()  # noqa: E501
-    expected_tsv = (
-        "1\ttest@test.com\tsome notes\n2\t\\n\tother notes with a\ttab\n"  # noqa: E501
-    )
+    expected_tsv = "1\ttest@test.com\tsome notes\n2\t\\n\tother notes with a\ttab\n"  # noqa: E501
     assert tsv_content == expected_tsv
 
 
@@ -352,9 +335,7 @@ def test_cli_invalid_arguments(tmp_path, invalid_args):
 
     with pytest.raises(SystemExit) as e:
         with patch.object(sys, "argv", base_args + invalid_args):
-            with patch(
-                "optimize_sql_dump._load_config", return_value={}
-            ):  # Mock _load_config
+            with patch("optimize_sql_dump._load_config", return_value={}):  # Mock _load_config
                 cli_main()
     assert e.type is SystemExit
     assert e.value.code != 0  # Ensure it's an error exit code
@@ -539,9 +520,7 @@ class TestDatabaseDiffer:
             ),
         ],
     )
-    def test_build_db_column_definition(
-        self, differ, col_name, db_col_info, expected_def
-    ):
+    def test_build_db_column_definition(self, differ, col_name, db_col_info, expected_def):
         """Tests the reconstruction of column definitions from database metadata."""
         result = differ._build_db_column_definition(col_name, db_col_info)
         assert result == expected_def
@@ -607,9 +586,7 @@ class TestDatabaseDiffer:
             ),
         ],
     )
-    def test_compare_data_row_edge_cases(
-        self, differ, dump_row, db_row, pk_cols, expected_fragment
-    ):
+    def test_compare_data_row_edge_cases(self, differ, dump_row, db_row, pk_cols, expected_fragment):
         """Tests various edge cases for data row comparison."""
         update_stmt = differ.compare_data_row(dump_row, db_row, "users", pk_cols)
         if expected_fragment:
@@ -624,10 +601,7 @@ class TestDatabaseDiffer:
         """
         in_file = tmp_path / "dump.sql"
         out_file = tmp_path / "diff.sql"
-        in_file.write_text(
-            "CREATE TABLE `users` (`id` int, PRIMARY KEY (`id`));\n"
-            "INSERT INTO `users` VALUES (1);"
-        )
+        in_file.write_text("CREATE TABLE `users` (`id` int, PRIMARY KEY (`id`));\n" "INSERT INTO `users` VALUES (1);")
 
         args = {
             "inpath": str(in_file),
@@ -665,10 +639,7 @@ def test_handle_insert_uses_temp_table(tmp_path):
     """Ensure that when memory limit is exceeded, PKs are stored via temp-table helper."""
     in_file = tmp_path / "dump.sql"
     out_file = tmp_path / "diff.sql"
-    in_file.write_text(
-        "CREATE TABLE `users` (`id` int, PRIMARY KEY (`id`));\n"
-        "INSERT INTO `users` VALUES (3);"
-    )
+    in_file.write_text("CREATE TABLE `users` (`id` int, PRIMARY KEY (`id`));\n" "INSERT INTO `users` VALUES (3);")
 
     args = {
         "inpath": str(in_file),
@@ -697,9 +668,7 @@ def test_handle_insert_uses_temp_table(tmp_path):
 
     # Replace temp-table helpers so they don't touch a real DB
     def fake_create_tmp(tname, pk_cols):
-        differ.memory_usage.setdefault(
-            tname, {"pk_count": 0, "using_temp_table": False}
-        )
+        differ.memory_usage.setdefault(tname, {"pk_count": 0, "using_temp_table": False})
         differ.memory_usage[tname]["using_temp_table"] = True
 
     differ._create_temp_table_for_pks = MagicMock(side_effect=fake_create_tmp)
@@ -719,9 +688,7 @@ class TestDumpWriter:
         handler = MagicMock(spec=opt.MySQLHandler)
         handler.normalize_table_name.side_effect = lambda x: x.strip("`")
         handler.insert_template = "INSERT INTO {table} {cols} VALUES\n{values};\n"
-        handler.get_truncate_statement.side_effect = (
-            lambda t: f"TRUNCATE TABLE `{t}`;\n"
-        )
+        handler.get_truncate_statement.side_effect = lambda t: f"TRUNCATE TABLE `{t}`;\n"
         handler.extract_columns_from_create.return_value = "(`id`, `name`)"
         handler.get_load_statement.return_value = "LOAD DATA MOCK"
         return handler
@@ -785,9 +752,7 @@ class TestDumpWriter:
         assert t1_file.exists()
         content = t1_file.read_text()
         assert content.startswith("TRUNCATE TABLE `t1`;")
-        assert (
-            "CREATE TABLE" not in content
-        ), "CREATE statements should not be written in insert_only mode"
+        assert "CREATE TABLE" not in content, "CREATE statements should not be written in insert_only mode"
         assert "INSERT INTO" in content
 
     def test_insert_buffering_and_flushing(self, mock_handler, tmp_path):
@@ -796,10 +761,7 @@ class TestDumpWriter:
         with opt.DumpWriter(mock_handler, **args) as writer:
             writer.add_insert_tuples("t1", "(`id`)", ["(1)", "(2)"])
             # Buffer should be flushed here as batch_size is reached
-            assert (
-                "t1" not in writer.insert_buffers
-                or not writer.insert_buffers["t1"]["tuples"]
-            )
+            assert "t1" not in writer.insert_buffers or not writer.insert_buffers["t1"]["tuples"]
 
             writer.add_insert_tuples("t1", "(`id`)", ["(3)"])
             # Buffer should not be flushed yet
